@@ -232,8 +232,7 @@ class OpenepcisBulkImport(models.TransientModel):
         if skipped:
             lines.append(
                 _(
-                    "%s record(s) were left out because their identifier is not "
-                    "a valid GS1 key.",
+                    "%s record(s) were left out because their identifier is not a valid GS1 key.",
                     len(skipped),
                 )
             )

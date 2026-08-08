@@ -180,6 +180,17 @@ docker compose run --rm odoo odoo -d test -i openepcis_connector \
 ruff check . && ruff format --check .
 ```
 
+The ruff version is pinned in `pyproject.toml`. A formatter is only useful if
+everyone runs the same one — ruff's output changes between releases, so an
+unpinned setup turns CI red on an unrelated push and reformats files nobody
+touched. A mismatched version says so rather than quietly rewriting your diff:
+
+```
+Required version `0.16.2` does not match the running version `0.2.2`
+```
+
+Install the pinned one with `pipx install ruff==0.16.2`, or in a virtualenv.
+
 The tests never touch a real resolver. They stub the HTTP client, because a
 suite that talked to a live platform would depend on a network, on credentials,
 and — since a confirmed identifier is registered with GS1 for good — on nothing

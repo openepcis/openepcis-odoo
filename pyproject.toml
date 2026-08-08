@@ -5,6 +5,16 @@
 line-length = 100
 target-version = "py310"   # the oldest interpreter Odoo 18 supports
 
+# Pinned exactly, because a formatter is only useful if everyone runs the same
+# one. Ruff's output changes between releases — it will join two implicitly
+# concatenated strings that an older version left alone — so an unpinned CI turns
+# red on an unrelated push, and a contributor with a different ruff reformats
+# files nobody touched. A mismatched version now fails loudly instead.
+#
+# Raising this is a deliberate act: bump it, run `ruff format`, commit the churn
+# as its own change.
+required-version = "0.16.2"
+
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
 ignore = [
