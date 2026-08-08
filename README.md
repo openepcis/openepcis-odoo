@@ -141,6 +141,16 @@ short a claim", which look identical from the outside.
 On the client itself: allow the `offline_access` scope, or Keycloak issues an
 ordinary refresh token and the connector stops working when the session ends.
 
+**A token is bound to the issuer URL it was minted under.** Where an alias and a
+canonical hostname both serve one realm, a token issued via one and refreshed via
+the other fails — the addon reports that case specifically rather than calling it
+revoked, because the fix is entirely different.
+
+`doc/keycloak.md` records the client settings, the required claims, and what was
+measured against Keycloak 26.2.5 — including why RFC 8693 token exchange cannot
+mint an offline token and what to use instead. `doc/keycloak-test-realm.json`
+reproduces it locally in one command.
+
 ---
 
 ## The field mapping

@@ -146,6 +146,11 @@ class TestTokens(OpenepcisCase):
         # about reading a well-known document.
         client_module._OIDC_CONFIG["https://auth.example.test/realms/openepcis"] = DISCOVERY
 
+    @staticmethod
+    def _jwt_for(claims):
+        payload = base64.urlsafe_b64encode(json.dumps(claims).encode()).decode().rstrip("=")
+        return "header.%s.signature" % payload
+
     def _patch(self, name, value):
         patcher = patch("%s.%s" % (MODULE, name), value)
         patcher.start()
@@ -243,6 +248,37 @@ class TestTokens(OpenepcisCase):
         with self.assertRaises(OpenepcisError):
             self.env["openepcis.client"].post("/gs1de/keys/draw", {"ai": "01"})
         self.assertEqual(len(calls["api"]), 2, "one retry, then it gives up")
+
+    def test_an_issuer_mismatch_is_not_reported_as_revoked(self):
+        # Two hostnames can serve one realm — an ingress alias and the canonical
+        # name. A token minted via one and refreshed via the other fails with
+        # invalid_grant, and calling that "revoked" sends the reader hunting in
+        # Keycloak for a session that is perfectly intact.
+        self._transport(
+            [
+                _json(
+                    {
+                        "error": "invalid_grant",
+                        "error_description": "Invalid token issuer. Expected 'https://auth.example.test/realms/openepcis'",
+                    },
+                    400,
+                )
+            ]
+        )
+        with self.assertRaises(OpenepcisError) as caught:
+            self.env["openepcis.client"].get("/products")
+        message = str(caught.exception)
+        self.assertIn("issued by a different URL", message)
+        self.assertNotIn("revoked", message)
+
+    def test_the_token_label_is_corrected_from_the_access_token(self):
+        # An offline refresh token carries no preferred_username, so a pasted
+        # token can only be labelled with its subject UUID until the first mint.
+        self.company.openepcis_token_subject = "0c842b8e-uuid-looking"
+        access = self._jwt_for({"preferred_username": "svc-odoo"})
+        self._transport([_json({"access_token": access, "expires_in": 300})])
+        self.env["openepcis.client"].get("/products")
+        self.assertEqual(self.company.openepcis_token_subject, "svc-odoo")
 
     def test_a_realm_that_is_not_a_realm_is_explained(self):
         client_module._OIDC_CONFIG.clear()
