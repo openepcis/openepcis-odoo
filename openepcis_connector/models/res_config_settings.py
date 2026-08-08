@@ -10,8 +10,15 @@ class ResConfigSettings(models.TransientModel):
 
     openepcis_enabled = fields.Boolean(related="company_id.openepcis_enabled", readonly=False)
     openepcis_base_url = fields.Char(related="company_id.openepcis_base_url", readonly=False)
-    openepcis_api_key = fields.Char(related="company_id.openepcis_api_key", readonly=False)
-    openepcis_api_secret = fields.Char(related="company_id.openepcis_api_secret", readonly=False)
+    openepcis_oidc_issuer = fields.Char(related="company_id.openepcis_oidc_issuer", readonly=False)
+    openepcis_client_id = fields.Char(related="company_id.openepcis_client_id", readonly=False)
+    openepcis_client_secret = fields.Char(
+        related="company_id.openepcis_client_secret", readonly=False
+    )
+    openepcis_offline_token = fields.Char(
+        related="company_id.openepcis_offline_token", readonly=False
+    )
+    openepcis_token_subject = fields.Char(related="company_id.openepcis_token_subject")
 
     def action_openepcis_refresh_channels(self):
         """Re-read which registries this deployment publishes onward to.

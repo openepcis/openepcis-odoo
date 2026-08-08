@@ -15,25 +15,54 @@
             <setting string="Publish to OpenEPCIS"
                      help="Queue products and partners for publication to the GS1 Digital Link resolver. Turning this off stops the queue from being drained; nothing already published is withdrawn.">
               <field name="openepcis_enabled"/>
+
               <div class="content-group mt16" invisible="not openepcis_enabled">
-                <div class="row">
+                <div class="row mt8">
                   <label for="openepcis_base_url" class="col-lg-3 o_light_label"/>
                   <field name="openepcis_base_url"
                          placeholder="https://id.epcis.cloud"
                          required="openepcis_enabled"/>
                 </div>
+              </div>
+            </setting>
+
+            <setting string="Identity"
+                     class="col-12 col-lg-12"
+                     help="Odoo authenticates with an OIDC offline token: a refresh token issued with the offline_access scope, from which short-lived access tokens are minted. No password and no permanent access token is kept here, and access is revoked in Keycloak."
+                     invisible="not openepcis_enabled">
+              <div class="content-group">
                 <div class="row">
-                  <label for="openepcis_api_key" class="col-lg-3 o_light_label"/>
-                  <field name="openepcis_api_key"
-                         password="True"
+                  <label for="openepcis_oidc_issuer" class="col-lg-3 o_light_label"/>
+                  <field name="openepcis_oidc_issuer"
+                         placeholder="https://auth.epcis.cloud/realms/openepcis"
                          required="openepcis_enabled"/>
                 </div>
                 <div class="row">
-                  <label for="openepcis_api_secret" class="col-lg-3 o_light_label"/>
-                  <field name="openepcis_api_secret"
-                         password="True"
-                         required="openepcis_enabled"/>
+                  <label for="openepcis_client_id" class="col-lg-3 o_light_label"/>
+                  <field name="openepcis_client_id" required="openepcis_enabled"/>
                 </div>
+                <div class="row">
+                  <label for="openepcis_client_secret" class="col-lg-3 o_light_label"/>
+                  <field name="openepcis_client_secret" password="True"
+                         placeholder="only for a confidential client"/>
+                </div>
+                <div class="row">
+                  <label for="openepcis_token_subject" class="col-lg-3 o_light_label"/>
+                  <div class="col">
+                    <span invisible="not openepcis_token_subject">
+                      <field name="openepcis_token_subject" readonly="1" class="oe_inline"/>
+                    </span>
+                    <span class="text-muted" invisible="openepcis_token_subject">
+                      no offline token yet
+                    </span>
+                  </div>
+                </div>
+                <div class="row">
+                  <label for="openepcis_offline_token" class="col-lg-3 o_light_label"/>
+                  <field name="openepcis_offline_token" password="True"
+                         placeholder="paste an offline token, or fetch one below"/>
+                </div>
+
                 <div class="mt8">
                   <button name="action_openepcis_test_connection"
                           type="object"
@@ -46,11 +75,19 @@
                           icon="fa-refresh"
                           class="btn-link"/>
                 </div>
+
                 <div class="text-muted mt8">
-                  The API key stands for a Keycloak identity. Publishing needs a
-                  tenant role and a <code>defaultGroup</code> claim; drawing
-                  identifiers additionally needs <code>gs1CompanyPrefix</code>.
-                  Test connection reports which of these are present.
+                  Issue the offline token in the OpenEPCIS web interface, under
+                  your profile, and paste it here. It is deliberately not minted
+                  from inside Odoo: that would need Keycloak's deprecated
+                  password grant enabled for the whole realm, and would put a
+                  user's password through the ERP.
+                </div>
+                <div class="text-muted mt4">
+                  The token carries the roles and claims of the user it was issued
+                  for: a tenant role to write at all, <code>defaultGroup</code> to
+                  say which catalog, and <code>gs1CompanyPrefix</code> to draw
+                  identifiers. Test connection reports which of these are present.
                 </div>
               </div>
             </setting>

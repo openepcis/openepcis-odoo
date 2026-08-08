@@ -5,6 +5,10 @@ Every test here runs against a stubbed HTTP client. Talking to a real resolver
 from a unit test would make the suite depend on a network, on credentials, and —
 because a confirmed key is registered with GS1 for good — on nothing ever going
 wrong. The live check belongs in the documented smoke test, not here.
+
+The stubs patch :meth:`OpenepcisClient.request`, which sits *above* token
+handling, so most tests never touch Keycloak either. The tests that do care about
+tokens stub the transport instead; see ``test_client``.
 """
 
 from unittest.mock import patch
@@ -32,13 +36,30 @@ class OpenepcisCase(TransactionCase):
             {
                 "openepcis_enabled": True,
                 "openepcis_base_url": "https://id.example.test",
-                "openepcis_api_key": "test-key",
-                "openepcis_api_secret": "test-secret",
+                "openepcis_oidc_issuer": "https://auth.example.test/realms/openepcis",
+                "openepcis_client_id": "odoo-connector",
+                "openepcis_offline_token": "offline.token.value",
             }
         )
         cls.category = cls.env["product.category"].create(
             {"name": "Test category", "openepcis_gpc_code": "10000045"}
         )
+
+    def stub_access_token(self, value="stub-access-token"):
+        """Skip token minting for tests that are about something else.
+
+        Called explicitly rather than in ``setUp``: the tests that exercise token
+        handling itself must not have it stubbed out from under them, and a stub
+        installed for everyone would have hidden exactly the bugs those tests
+        exist to catch.
+        """
+        patcher = patch.object(
+            OpenepcisClient,
+            "_access_token",
+            lambda _self, company, force=False: value,
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def _product(self, **values):
         """A product complete enough to publish, unless a test says otherwise."""

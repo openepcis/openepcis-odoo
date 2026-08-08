@@ -41,12 +41,33 @@
           <group string="Net content"
                  help="How much product is in the package. GS1 registries refuse a product without it.">
             <field name="openepcis_net_content"/>
+            <!-- Deliberately not behind uom.group_uom: a quantity without its
+                 unit is not a net content, and GS1 registries reject it. This is
+                 not an optional unit-of-measure feature. -->
             <field name="openepcis_net_content_uom_id"
-                   groups="uom.group_uom"
                    options="{'no_create': True}"
                    required="openepcis_net_content > 0"/>
           </group>
+          <group invisible="openepcis_key_state in (False, 'own')">
+            <field name="openepcis_key_state" readonly="1"/>
+          </group>
+          <field name="openepcis_single_variant" invisible="1"/>
           <div class="mt16">
+            <!-- Drawing is a variant act, but a single-variant product is edited
+                 here and nowhere else, so the button has to be here too. -->
+            <button name="action_openepcis_draw_key"
+                    type="object"
+                    string="Draw GTIN"
+                    icon="fa-magic"
+                    class="btn-secondary"
+                    invisible="barcode or not openepcis_single_variant"
+                    confirm="Take the next free GTIN from your company prefix? It is held for this product and registered with GS1 only when the product is published."/>
+            <button name="action_openepcis_release_key"
+                    type="object"
+                    string="Hand the GTIN back"
+                    icon="fa-undo"
+                    class="btn-link"
+                    invisible="openepcis_key_state != 'candidate'"/>
             <button name="action_openepcis_publish"
                     type="object"
                     string="Publish now"

@@ -14,6 +14,7 @@ being typed a second time.
 | **Odoo** | 18.0 (branch `18.0`), 19.0 (branch `19.0`) |
 | **Dependencies** | `product` only. No Python packages beyond what Odoo ships. |
 | **Direction** | Odoo → OpenEPCIS. See [Limits](#limits). |
+| **Auth** | OIDC offline token (no static key, no stored password) |
 
 ---
 
@@ -45,16 +46,40 @@ git clone https://github.com/openepcis/openepcis-odoo.git
 odoo -d yourdb -i openepcis_connector
 ```
 
-Then **Settings → General Settings → OpenEPCIS**: enter the resolver URL, the API
-key and the secret, and press **Test connection**.
+Then **Settings → General Settings → OpenEPCIS**: enter the resolver URL and the
+Keycloak realm, get an offline token, and press **Test connection**.
 
 ---
 
-## Before it will work: the Keycloak side
+## Authentication: an offline token
 
-This is the part that costs an afternoon, and none of it is Odoo work. The API
-key stands for an identity in the platform's Keycloak realm, and that identity
-must carry three things or the resolver will refuse it:
+Odoo stores an **OIDC offline token** — a refresh token issued with the
+`offline_access` scope — and mints a short-lived access token from it for every
+call. Nothing long-lived goes over the wire, no password is kept, and access is
+withdrawn in Keycloak by removing the offline session, without touching Odoo.
+
+**This addon consumes a token; it never mints one.** Issue it in the OpenEPCIS
+web interface, under your profile, and paste it into the *Offline token* field.
+
+That split is deliberate. Minting a token here would need Keycloak's
+*Direct Access Grants* — the password grant, removed in OAuth 2.1 — enabled for
+the whole realm, and would route a user's password through the ERP. Issuing
+belongs where a human is present in a browser and can consent.
+
+The realm URL is the realm itself — `https://auth.example.org/realms/openepcis` —
+and the connector discovers the endpoints from there, so nothing else needs
+configuring.
+
+The addon checks what it can when you paste a token: an ordinary refresh token is
+refused on the spot, because it would work for a few minutes and then stop, long
+after you had moved on. It also stores a rotated refresh token if your realm has
+*Revoke Refresh Token* switched on — losing that would lock the connector out
+with a credential that still looks correct on screen.
+
+### What the token's user needs
+
+The token carries the roles and claims of the user it was issued for, so that
+user — not you — is what the resolver sees. It must have:
 
 | What | Why | Symptom when missing |
 |---|---|---|
@@ -64,12 +89,14 @@ must carry three things or the resolver will refuse it:
 
 Optional, and only if you publish product images: the realm role `files-writer`.
 
-**Test connection** probes for each of these in turn and names the one that is
-missing, so you do not have to read resolver logs to find out.
+**Test connection** probes the token first and then each of these in turn, naming
+whichever is missing — so you do not have to read resolver logs to find out. It
+also tells "this deployment is older than the feature" apart from "your token is
+short a claim", which look identical from the outside.
 
-If your platform operator issues bearer tokens instead of API keys, a Keycloak
-service account using `client_credentials` works identically — the resolver
-accepts both and derives the same identity.
+On the client itself: allow the `offline_access` scope, or Keycloak issues an
+ordinary refresh token and the connector stops working when the session ends. The
+connector checks for this and refuses such a token rather than storing it.
 
 ---
 

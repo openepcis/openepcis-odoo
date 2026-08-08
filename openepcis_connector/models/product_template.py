@@ -19,7 +19,8 @@ a brand field
     which not everyone runs.
 """
 
-from odoo import api, fields, models
+from odoo import _, api, fields, models
+from odoo.exceptions import UserError
 
 
 class ProductTemplate(models.Model):
@@ -76,7 +77,9 @@ class ProductTemplate(models.Model):
         compute="_compute_openepcis_state",
     )
     openepcis_error = fields.Char(compute="_compute_openepcis_state")
-    openepcis_digital_link = fields.Char(compute="_compute_openepcis_digital_link")
+    openepcis_digital_link = fields.Char(
+        string="Digital Link", compute="_compute_openepcis_digital_link"
+    )
     openepcis_missing_terms = fields.Char(
         string="Still needed",
         compute="_compute_openepcis_missing_terms",
@@ -148,6 +151,26 @@ class ProductTemplate(models.Model):
                 variants.openepcis_digital_link if len(variants) == 1 else False
             )
 
+    openepcis_key_state = fields.Selection(
+        [
+            ("own", "Own number"),
+            ("candidate", "Drawn, not yet registered"),
+            ("registered", "Registered with GS1"),
+        ],
+        string="Identifier origin",
+        compute="_compute_openepcis_key_state",
+    )
+    openepcis_single_variant = fields.Boolean(compute="_compute_openepcis_key_state")
+
+    @api.depends("product_variant_ids.openepcis_key_state")
+    def _compute_openepcis_key_state(self):
+        """Only meaningful for a single-variant product, like the barcode itself."""
+        for template in self:
+            variants = template.product_variant_ids
+            single = len(variants) == 1
+            template.openepcis_single_variant = single
+            template.openepcis_key_state = variants.openepcis_key_state if single else False
+
     def action_openepcis_publish(self):
         """Publish every variant of these templates.
 
@@ -162,6 +185,31 @@ class ProductTemplate(models.Model):
     def action_openepcis_open_digital_link(self):
         self.ensure_one()
         return self.product_variant_ids[:1].action_openepcis_open_digital_link()
+
+    # Drawing an identifier belongs on the variant, because the variant is the
+    # trade item that gets one. But almost every Odoo database holds
+    # single-variant products, and nobody opens the variant form for those — so
+    # the button has to be reachable from the template as well, or the feature
+    # is hidden from the people it was built for.
+
+    def _openepcis_sole_variant(self):
+        self.ensure_one()
+        variants = self.product_variant_ids
+        if len(variants) != 1:
+            raise UserError(
+                _(
+                    "%s has several variants, and each one gets its own GTIN. "
+                    "Draw them from the Variants list.",
+                    self.display_name,
+                )
+            )
+        return variants
+
+    def action_openepcis_draw_key(self):
+        return self._openepcis_sole_variant().action_openepcis_draw_key()
+
+    def action_openepcis_release_key(self):
+        return self._openepcis_sole_variant().action_openepcis_release_key()
 
     @api.model
     def _openepcis_default_net_content_uom(self):
