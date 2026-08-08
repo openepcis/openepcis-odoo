@@ -1,0 +1,27 @@
+# Tooling configuration only. This repository is an Odoo addon, not a Python
+# package: Odoo loads it from the addons path, so there is nothing to build here.
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"   # the oldest interpreter Odoo 18 supports
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
+ignore = [
+    # Odoo's translation helper is named _, which shadows the conventional
+    # throwaway name; renaming it is not an option.
+    "E731",
+    # Percent formatting is not a legacy habit here: odoo's _() extracts
+    # printf-style placeholders, and rewriting them as f-strings or .format()
+    # would leave every translatable message untranslatable.
+    "UP031",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Manifests are a bare dict literal by Odoo's convention, with no assignment.
+"**/__manifest__.py" = ["B018"]
+# Odoo loads a module's submodules through these imports; they are the point.
+"**/__init__.py" = ["F401", "I001"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["odoo"]

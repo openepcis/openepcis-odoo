@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+  <record id="openepcis_field_mapping_view_list" model="ir.ui.view">
+    <field name="name">openepcis.field.mapping.list</field>
+    <field name="model">openepcis.field.mapping</field>
+    <field name="arch" type="xml">
+      <list string="Field mapping" editable="bottom">
+        <field name="sequence" widget="handle"/>
+        <field name="model_name"/>
+        <field name="odoo_field"/>
+        <field name="gs1_path"/>
+        <field name="value_type"/>
+        <field name="unit_field" optional="hide"/>
+        <field name="unit_code" optional="hide"/>
+        <field name="note" optional="show"/>
+        <field name="active" widget="boolean_toggle"/>
+      </list>
+    </field>
+  </record>
+
+  <record id="openepcis_field_mapping_view_form" model="ir.ui.view">
+    <field name="name">openepcis.field.mapping.form</field>
+    <field name="model">openepcis.field.mapping</field>
+    <field name="arch" type="xml">
+      <form string="Field mapping">
+        <sheet>
+          <group>
+            <group>
+              <field name="model_name"/>
+              <field name="odoo_field"/>
+              <field name="active"/>
+              <field name="sequence"/>
+            </group>
+            <group>
+              <field name="gs1_path"/>
+              <field name="value_type"/>
+              <field name="unit_field" invisible="value_type != 'quantity'"/>
+              <field name="unit_code" invisible="value_type != 'quantity'"/>
+            </group>
+          </group>
+          <group string="Note">
+            <field name="note" nolabel="1"/>
+          </group>
+        </sheet>
+      </form>
+    </field>
+  </record>
+
+  <record id="openepcis_field_mapping_view_search" model="ir.ui.view">
+    <field name="name">openepcis.field.mapping.search</field>
+    <field name="model">openepcis.field.mapping</field>
+    <field name="arch" type="xml">
+      <search>
+        <field name="odoo_field"/>
+        <field name="gs1_path"/>
+        <filter name="group_model" string="Model" context="{'group_by': 'model_name'}"/>
+      </search>
+    </field>
+  </record>
+
+  <record id="action_openepcis_field_mapping" model="ir.actions.act_window">
+    <field name="name">OpenEPCIS field mapping</field>
+    <field name="res_model">openepcis.field.mapping</field>
+    <field name="view_mode">list,form</field>
+    <field name="context">{'search_default_group_model': 1}</field>
+    <field name="help" type="html">
+      <p class="o_view_nocontent_smiling_face">Map an Odoo field to a GS1 term</p>
+      <p>
+        Each row says which Odoo field feeds which term in the published
+        catalog document. Dotted paths work on both sides:
+        <code>categ_id.openepcis_gpc_code</code> reads across a relation,
+        <code>brand.brandName</code> writes into a nested term.
+      </p>
+    </field>
+  </record>
+
+  <menuitem id="menu_openepcis_root"
+            name="OpenEPCIS"
+            parent="base.menu_custom"
+            sequence="90"/>
+
+  <menuitem id="menu_openepcis_field_mapping"
+            name="Field mapping"
+            parent="menu_openepcis_root"
+            action="action_openepcis_field_mapping"
+            sequence="10"/>
+
+</odoo>

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+  <!--
+    A printable label carrying the Digital Link as a QR code.
+
+    The QR is rendered by Odoo's own barcode controller, so the addon needs no
+    imaging library of its own — which is what keeps it installable where extra
+    Python packages are not allowed.
+  -->
+  <template id="report_openepcis_label_document">
+    <t t-call="web.basic_layout">
+      <t t-foreach="docs" t-as="product">
+        <div class="page" style="text-align:center;">
+          <t t-set="link" t-value="product.openepcis_digital_link"/>
+
+          <t t-if="link">
+            <img t-att-src="product.openepcis_qr_src"
+                 style="width:60mm;height:60mm;"
+                 t-att-alt="link"/>
+            <div style="margin-top:4mm;font-size:14px;">
+              <strong t-field="product.name"/>
+            </div>
+            <div style="font-family:monospace;font-size:16px;letter-spacing:1px;">
+              <span t-field="product.barcode"/>
+            </div>
+            <div style="margin-top:2mm;font-size:9px;color:#666;word-break:break-all;">
+              <span t-esc="link"/>
+            </div>
+          </t>
+
+          <t t-else="">
+            <p style="margin-top:20mm;">
+              <span t-field="product.display_name"/> has not been published yet,
+              so it has no Digital Link to print.
+            </p>
+          </t>
+        </div>
+      </t>
+    </t>
+  </template>
+
+  <record id="action_report_openepcis_label" model="ir.actions.report">
+    <field name="name">GS1 Digital Link label</field>
+    <field name="model">product.product</field>
+    <field name="report_type">qweb-pdf</field>
+    <field name="report_name">openepcis_connector.report_openepcis_label_document</field>
+    <field name="report_file">openepcis_connector.report_openepcis_label_document</field>
+    <field name="binding_model_id" ref="product.model_product_product"/>
+    <field name="binding_type">report</field>
+    <field name="print_report_name">'GS1 label - %s' % object.default_code or object.name</field>
+  </record>
+
+</odoo>

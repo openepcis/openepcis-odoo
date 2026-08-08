@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+  <!-- Product: everything the catalog needs, on one page of the product form. -->
+  <record id="product_template_form_view_openepcis" model="ir.ui.view">
+    <field name="name">product.template.form.openepcis</field>
+    <field name="model">product.template</field>
+    <field name="inherit_id" ref="product.product_template_form_view"/>
+    <field name="arch" type="xml">
+
+      <xpath expr="//notebook" position="inside">
+        <page string="GS1 / OpenEPCIS" name="openepcis">
+          <group>
+            <group string="Publication">
+              <field name="openepcis_publish"/>
+              <field name="openepcis_state" widget="badge"
+                     decoration-success="openepcis_state == 'synced'"
+                     decoration-warning="openepcis_state in ('queued', 'partial')"
+                     decoration-danger="openepcis_state == 'error'"
+                     invisible="not openepcis_publish"/>
+              <field name="openepcis_error"
+                     invisible="openepcis_state != 'error'"
+                     class="text-danger"/>
+              <field name="openepcis_digital_link" widget="url" readonly="1"
+                     invisible="not openepcis_digital_link"/>
+              <field name="openepcis_missing_terms"
+                     string="Still needed"
+                     readonly="1"
+                     class="text-warning"
+                     invisible="not openepcis_missing_terms"/>
+            </group>
+            <group string="Classification">
+              <field name="openepcis_brand_name"/>
+              <field name="openepcis_country_of_origin_id"
+                     options="{'no_create': True}"/>
+              <field name="openepcis_target_market_ids"
+                     widget="many2many_tags"
+                     options="{'no_create': True}"/>
+            </group>
+          </group>
+          <group string="Net content"
+                 help="How much product is in the package. GS1 registries refuse a product without it.">
+            <field name="openepcis_net_content"/>
+            <field name="openepcis_net_content_uom_id"
+                   groups="uom.group_uom"
+                   options="{'no_create': True}"
+                   required="openepcis_net_content > 0"/>
+          </group>
+          <div class="mt16">
+            <button name="action_openepcis_publish"
+                    type="object"
+                    string="Publish now"
+                    icon="fa-cloud-upload"
+                    class="btn-primary"/>
+            <button name="action_openepcis_open_digital_link"
+                    type="object"
+                    string="Open Digital Link"
+                    icon="fa-external-link"
+                    class="btn-secondary"
+                    invisible="not openepcis_digital_link"/>
+          </div>
+          <p class="text-muted mt16">
+            The GTIN is the product's barcode. Each variant is its own trade item
+            and needs its own barcode before it can be published. Products with
+            several variants are handled from the Variants list.
+          </p>
+          <p class="text-muted"
+             invisible="openepcis_state != 'partial'">
+            Some variants are published and some are not — open the variants to
+            see which.
+          </p>
+        </page>
+      </xpath>
+
+    </field>
+  </record>
+
+  <!-- The category is where the GPC brick belongs: set once, inherited by every product. -->
+  <record id="product_category_form_view_openepcis" model="ir.ui.view">
+    <field name="name">product.category.form.openepcis</field>
+    <field name="model">product.category</field>
+    <field name="inherit_id" ref="product.product_category_form_view"/>
+    <field name="arch" type="xml">
+      <xpath expr="//group" position="inside">
+        <group string="GS1">
+          <field name="openepcis_gpc_code" placeholder="10000045"/>
+          <field name="openepcis_gpc_title" invisible="not openepcis_gpc_title"/>
+        </group>
+      </xpath>
+    </field>
+  </record>
+
+  <!-- Mass action: opting a selection in is the normal way to start. -->
+  <record id="action_product_openepcis_publish" model="ir.actions.server">
+    <field name="name">Publish to OpenEPCIS</field>
+    <field name="model_id" ref="product.model_product_template"/>
+    <field name="binding_model_id" ref="product.model_product_template"/>
+    <field name="binding_view_types">list</field>
+    <field name="state">code</field>
+    <field name="code">action = records.action_openepcis_publish()</field>
+  </record>
+
+</odoo>

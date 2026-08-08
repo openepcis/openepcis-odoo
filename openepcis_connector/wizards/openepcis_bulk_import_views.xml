@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+  <record id="openepcis_bulk_import_view_form" model="ir.ui.view">
+    <field name="name">openepcis.bulk.import.form</field>
+    <field name="model">openepcis.bulk.import</field>
+    <field name="arch" type="xml">
+      <form string="Load a catalogue into OpenEPCIS">
+        <field name="state" invisible="1"/>
+
+        <div invisible="state == 'done'">
+          <group>
+            <field name="kind" widget="radio"/>
+            <field name="scope" widget="radio"/>
+            <field name="record_count"/>
+          </group>
+          <div class="alert alert-info" role="alert">
+            <p class="mb-1"><strong>This is a first-load tool.</strong></p>
+            <p class="mb-1">
+              Bulk loading only <em>creates</em> records. Anything the catalog
+              already holds comes back as a duplicate and is left as it is — it
+              is not overwritten. For everyday changes, use the ordinary
+              publication queue, which updates.
+            </p>
+            <p class="mb-0">
+              Only the English name travels this way; the bulk format has no
+              room for other languages. Records republished later carry them all.
+            </p>
+          </div>
+        </div>
+
+        <div invisible="state != 'done'">
+          <group>
+            <field name="result_summary" nolabel="1" colspan="2" readonly="1"/>
+          </group>
+          <group string="Rows that did not go through" invisible="not error_detail">
+            <field name="error_detail" nolabel="1" readonly="1"/>
+          </group>
+        </div>
+
+        <footer>
+          <button name="action_import"
+                  type="object"
+                  string="Load into OpenEPCIS"
+                  class="btn-primary"
+                  invisible="state == 'done' or record_count == 0"/>
+          <button string="Close" special="cancel" class="btn-secondary"/>
+        </footer>
+      </form>
+    </field>
+  </record>
+
+  <record id="action_openepcis_bulk_import" model="ir.actions.act_window">
+    <field name="name">Load a catalogue into OpenEPCIS</field>
+    <field name="res_model">openepcis.bulk.import</field>
+    <field name="view_mode">form</field>
+    <field name="target">new</field>
+  </record>
+
+  <menuitem id="menu_openepcis_bulk_import"
+            name="First load"
+            parent="menu_openepcis_root"
+            action="action_openepcis_bulk_import"
+            sequence="20"/>
+
+</odoo>

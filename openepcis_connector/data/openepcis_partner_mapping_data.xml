@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+  <!--
+    Default mapping for contacts published as GS1 organizations.
+
+    Note the address and contact rows: several of them share one parent path,
+    so `address.streetAddress` and `address.postalCode` build up a single
+    postal address, and `contactPoint[].email` and `contactPoint[].telephone`
+    land in the same contact point rather than in two.
+
+    Localised terms are used even for fields Odoo does not translate — the
+    catalog types organizationName and streetAddress as language maps, so a
+    plain string would be refused. A single-language database simply gets one
+    entry.
+  -->
+  <data noupdate="1">
+
+    <record id="mapping_partner_name" model="openepcis.field.mapping">
+      <field name="model_name">res.partner</field>
+      <field name="odoo_field">name</field>
+      <field name="gs1_path">organizationName</field>
+      <field name="value_type">localized</field>
+      <field name="sequence">10</field>
+    </record>
+
+    <record id="mapping_partner_street" model="openepcis.field.mapping">
+      <field name="model_name">res.partner</field>
+      <field name="odoo_field">street</field>
+      <field name="gs1_path">address.streetAddress</field>
+      <field name="value_type">localized</field>
+      <field name="sequence">20</field>
+    </record>
+
+    <record id="mapping_partner_street2" model="openepcis.field.mapping">
+      <field name="model_name">res.partner</field>
+      <field name="odoo_field">street2</field>
+      <field name="gs1_path">address.streetAddressLine2</field>
+      <field name="value_type">localized</field>
+      <field name="sequence">30</field>
+    </record>
+
+    <record id="mapping_partner_city" model="openepcis.field.mapping">
+      <field name="model_name">res.partner</field>
+      <field name="odoo_field">city</field>
+      <field name="gs1_path">address.addressLocality</field>
+      <field name="value_type">localized</field>
+      <field name="sequence">40</field>
+    </record>
+
+    <record id="mapping_partner_zip" model="openepcis.field.mapping">
+      <field name="model_name">res.partner</field>
+      <field name="odoo_field">zip</field>
+      <field name="gs1_path">address.postalCode</field>
+      <field name="value_type">text</field>
+      <field name="sequence">50</field>
+    </record>
+
+    <record id="mapping_partner_state" model="openepcis.field.mapping">
+      <field name="model_name">res.partner</field>
+      <field name="odoo_field">state_id.name</field>
+      <field name="gs1_path">address.addressRegion</field>
+      <field name="value_type">localized</field>
+      <field name="sequence">60</field>
+    </record>
+
+    <record id="mapping_partner_country" model="openepcis.field.mapping">
+      <field name="model_name">res.partner</field>
+      <field name="odoo_field">country_id.code</field>
+      <field name="gs1_path">address.addressCountry.countryCode</field>
+      <field name="value_type">text</field>
+      <field name="sequence">70</field>
+      <field name="note">ISO 3166-1 alpha-2.</field>
+    </record>
+
+    <record id="mapping_partner_email" model="openepcis.field.mapping">
+      <field name="model_name">res.partner</field>
+      <field name="odoo_field">email</field>
+      <field name="gs1_path">contactPoint[].email</field>
+      <field name="value_type">text</field>
+      <field name="sequence">80</field>
+    </record>
+
+    <record id="mapping_partner_phone" model="openepcis.field.mapping">
+      <field name="model_name">res.partner</field>
+      <field name="odoo_field">phone</field>
+      <field name="gs1_path">contactPoint[].telephone</field>
+      <field name="value_type">text</field>
+      <field name="sequence">90</field>
+    </record>
+
+    <record id="cron_publish_partners" model="ir.cron">
+      <field name="name">OpenEPCIS: publish contacts</field>
+      <field name="model_id" ref="base.model_res_partner"/>
+      <field name="state">code</field>
+      <field name="code">model._openepcis_cron_sync()</field>
+      <field name="interval_number">5</field>
+      <field name="interval_type">minutes</field>
+      <field name="nextcall" eval="(DateTime.now() + timedelta(minutes=5)).strftime('%Y-%m-%d %H:%M:%S')"/>
+      <field name="active" eval="True"/>
+    </record>
+
+  </data>
+</odoo>

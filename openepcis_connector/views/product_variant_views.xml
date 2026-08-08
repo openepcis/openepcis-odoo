@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+  <!--
+    The variant is the trade item, so this is where drawing an identifier and
+    publishing actually happen. The template page mirrors the state; this one
+    carries the buttons.
+  -->
+  <record id="product_variant_form_view_openepcis" model="ir.ui.view">
+    <field name="name">product.product.form.openepcis</field>
+    <field name="model">product.product</field>
+    <field name="inherit_id" ref="product.product_variant_easy_edit_view"/>
+    <field name="arch" type="xml">
+      <xpath expr="//group[@name='codes']" position="after">
+        <group string="GS1 / OpenEPCIS" name="openepcis">
+          <field name="openepcis_publish"/>
+          <field name="openepcis_key_state" invisible="openepcis_key_state == 'own'"/>
+          <field name="openepcis_state" widget="badge"
+                 decoration-success="openepcis_state == 'synced'"
+                 decoration-warning="openepcis_state == 'queued'"
+                 decoration-danger="openepcis_state == 'error'"
+                 invisible="not openepcis_publish"/>
+          <field name="openepcis_error"
+                 invisible="openepcis_state != 'error'"
+                 class="text-danger"/>
+          <field name="openepcis_missing_terms" readonly="1" class="text-warning"
+                 invisible="not openepcis_missing_terms"/>
+          <field name="openepcis_digital_link" widget="url" readonly="1"
+                 invisible="not openepcis_digital_link"/>
+          <div colspan="2">
+            <button name="action_openepcis_draw_key"
+                    type="object"
+                    string="Draw GTIN"
+                    icon="fa-magic"
+                    class="btn-secondary"
+                    invisible="barcode"
+                    confirm="Take the next free GTIN from your company prefix? It is held for this product and registered with GS1 only when the product is published."/>
+            <button name="action_openepcis_release_key"
+                    type="object"
+                    string="Hand the GTIN back"
+                    icon="fa-undo"
+                    class="btn-link"
+                    invisible="openepcis_key_state != 'candidate'"/>
+            <button name="action_openepcis_publish"
+                    type="object"
+                    string="Publish now"
+                    icon="fa-cloud-upload"
+                    class="btn-primary"
+                    invisible="not barcode"/>
+          </div>
+        </group>
+      </xpath>
+    </field>
+  </record>
+
+  <record id="product_variant_list_view_openepcis" model="ir.ui.view">
+    <field name="name">product.product.list.openepcis</field>
+    <field name="model">product.product</field>
+    <field name="inherit_id" ref="product.product_product_tree_view"/>
+    <field name="arch" type="xml">
+      <field name="barcode" position="after">
+        <field name="openepcis_state" optional="show" widget="badge"
+               decoration-success="openepcis_state == 'synced'"
+               decoration-warning="openepcis_state == 'queued'"
+               decoration-danger="openepcis_state == 'error'"/>
+      </field>
+    </field>
+  </record>
+
+  <record id="action_variant_openepcis_publish" model="ir.actions.server">
+    <field name="name">Publish to OpenEPCIS</field>
+    <field name="model_id" ref="product.model_product_product"/>
+    <field name="binding_model_id" ref="product.model_product_product"/>
+    <field name="binding_view_types">list</field>
+    <field name="state">code</field>
+    <field name="code">action = records.action_openepcis_publish()</field>
+  </record>
+
+</odoo>

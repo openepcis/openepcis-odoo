@@ -1,0 +1,8 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_openepcis_field_mapping_user,openepcis.field.mapping.user,model_openepcis_field_mapping,base.group_user,1,0,0,0
+access_openepcis_field_mapping_system,openepcis.field.mapping.system,model_openepcis_field_mapping,base.group_system,1,1,1,1
+access_openepcis_channel_user,openepcis.channel.user,model_openepcis_channel,base.group_user,1,0,0,0
+access_openepcis_channel_system,openepcis.channel.system,model_openepcis_channel,base.group_system,1,1,1,1
+access_openepcis_gpc_search,openepcis.gpc.search,model_openepcis_gpc_search,base.group_user,1,1,1,1
+access_openepcis_gpc_search_result,openepcis.gpc.search.result,model_openepcis_gpc_search_result,base.group_user,1,1,1,1
+access_openepcis_bulk_import,openepcis.bulk.import,model_openepcis_bulk_import,base.group_system,1,1,1,1

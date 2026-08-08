@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: [18.0, 19.0]
+  pull_request:
+
+# Nothing in the repositories this addon came from publishes a Python artifact,
+# so there was no pipeline to copy. This one does the two things that matter:
+# it lints, and it installs the addon into a real Odoo and runs its tests.
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/ruff-action@v3
+        with:
+          args: check --output-format=github
+
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/ruff-action@v3
+        with:
+          args: format --check --diff
+
+  gs1-helpers:
+    # The GS1 arithmetic is pure Python. Running it without a database means a
+    # broken check digit is reported in seconds rather than after a full install.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check digits, key validation, language tags
+        run: |
+          mkdir -p _probe
+          cp -r openepcis_connector/utils _probe/utils
+          mkdir -p _probe/tests
+          cp openepcis_connector/tests/test_gs1.py _probe/tests/
+          touch _probe/__init__.py _probe/tests/__init__.py
+          python -m unittest discover -s _probe -t . -p 'test_*.py' -v
+
+  tests:
+    runs-on: ubuntu-latest
+    container:
+      image: odoo:18
+      options: --user root
+    services:
+      db:
+        image: postgres:16
+        env:
+          POSTGRES_USER: odoo
+          POSTGRES_PASSWORD: odoo
+          POSTGRES_DB: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: addons/openepcis-odoo
+
+      - name: Install and run the test suite
+        run: |
+          odoo -d ci \
+            -i openepcis_connector \
+            --addons-path=/usr/lib/python3/dist-packages/odoo/addons,${GITHUB_WORKSPACE}/addons/openepcis-odoo \
+            --db_host=db --db_user=odoo --db_password=odoo \
+            --data-dir=/tmp/odoo-data \
+            --test-enable --test-tags /openepcis_connector \
+            --stop-after-init --log-level=test 2>&1 | tee odoo.log
+
+      - name: Fail on any failed test
+        run: |
+          # Odoo exits 0 even when tests fail, so the log is the source of truth.
+          if grep -qE "[0-9]+ failed, [0-9]+ error\(s\)" odoo.log \
+             && ! grep -q "0 failed, 0 error(s)" odoo.log; then
+            echo "::error::Odoo reported failing tests"
+            grep -E "(FAIL|ERROR):" odoo.log || true
+            exit 1
+          fi
+          grep -q "0 failed, 0 error(s)" odoo.log || {
+            echo "::error::No test summary in the log — the run did not complete"
+            tail -50 odoo.log
+            exit 1
+          }

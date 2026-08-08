@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+  <data noupdate="1">
+
+    <!--
+      Draining the queue is what actually publishes. Five minutes is a
+      compromise: fast enough that a user who saved a product and went to look
+      at the catalog finds it there, slow enough that a burst of edits collapses
+      into one publication per record.
+    -->
+    <record id="cron_publish_products" model="ir.cron">
+      <field name="name">OpenEPCIS: publish products</field>
+      <field name="model_id" ref="product.model_product_product"/>
+      <field name="state">code</field>
+      <field name="code">model._openepcis_cron_sync()</field>
+      <field name="interval_number">5</field>
+      <field name="interval_type">minutes</field>
+      <field name="nextcall" eval="(DateTime.now() + timedelta(minutes=5)).strftime('%Y-%m-%d %H:%M:%S')"/>
+      <field name="active" eval="True"/>
+    </record>
+
+  </data>
+</odoo>

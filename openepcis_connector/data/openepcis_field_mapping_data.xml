@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+  <!--
+    Default mapping for products.
+
+    noupdate="1" on purpose: these are starting points, not settings the module
+    owns. Once an administrator has adjusted a row to fit their database, a
+    module upgrade must not quietly undo the change.
+
+    The first five rows are exactly what a GS1 national registry refuses a
+    product without: a brand, a GPC brick, a net content, a description and a
+    target market. They are listed first so the mapping screen reads as a
+    checklist.
+  -->
+  <data noupdate="1">
+
+    <record id="mapping_product_name" model="openepcis.field.mapping">
+      <field name="model_name">product.product</field>
+      <field name="odoo_field">name</field>
+      <field name="gs1_path">productName</field>
+      <field name="value_type">localized</field>
+      <field name="sequence">10</field>
+      <field name="note">The catalog rejects a product without a name.</field>
+    </record>
+
+    <record id="mapping_product_description" model="openepcis.field.mapping">
+      <field name="model_name">product.product</field>
+      <field name="odoo_field">description_sale</field>
+      <field name="gs1_path">productDescription</field>
+      <field name="value_type">localized</field>
+      <field name="sequence">20</field>
+      <field name="note">Required by GS1 registries; the product name satisfies the rule if this is empty.</field>
+    </record>
+
+    <record id="mapping_product_brand" model="openepcis.field.mapping">
+      <field name="model_name">product.product</field>
+      <field name="odoo_field">openepcis_brand_name</field>
+      <field name="gs1_path">brand.brandName</field>
+      <field name="value_type">localized</field>
+      <field name="sequence">30</field>
+      <field name="note">Required by GS1 registries.</field>
+    </record>
+
+    <record id="mapping_product_gpc" model="openepcis.field.mapping">
+      <field name="model_name">product.product</field>
+      <field name="odoo_field">categ_id.openepcis_gpc_code</field>
+      <field name="gs1_path">gpcCategoryCode</field>
+      <field name="value_type">text</field>
+      <field name="sequence">40</field>
+      <field name="note">Required by GS1 registries. Read from the product category.</field>
+    </record>
+
+    <record id="mapping_product_net_content" model="openepcis.field.mapping">
+      <field name="model_name">product.product</field>
+      <field name="odoo_field">openepcis_net_content</field>
+      <field name="gs1_path">netContent</field>
+      <field name="value_type">quantity</field>
+      <field name="unit_field">openepcis_net_content_uom_id</field>
+      <field name="sequence">50</field>
+      <field name="note">Required by GS1 registries. How much product is in the package.</field>
+    </record>
+
+    <record id="mapping_product_target_market" model="openepcis.field.mapping">
+      <field name="model_name">product.product</field>
+      <field name="odoo_field">openepcis_target_market_ids.code</field>
+      <field name="gs1_path">targetMarket[].targetMarketCountries.countryCode</field>
+      <field name="value_type">text</field>
+      <field name="sequence">60</field>
+      <field name="note">Required by GS1 registries. ISO 3166-1 alpha-2; the first market is sent.</field>
+    </record>
+
+    <record id="mapping_product_country_origin" model="openepcis.field.mapping">
+      <field name="model_name">product.product</field>
+      <field name="odoo_field">openepcis_country_of_origin_id.code</field>
+      <field name="gs1_path">countryOfOrigin.countryCode</field>
+      <field name="value_type">text</field>
+      <field name="sequence">70</field>
+      <field name="note">ISO 3166-1 alpha-2. Point this at country_of_origin if you run Intrastat.</field>
+    </record>
+
+    <record id="mapping_product_net_weight" model="openepcis.field.mapping">
+      <field name="model_name">product.product</field>
+      <field name="odoo_field">weight</field>
+      <field name="gs1_path">netWeight</field>
+      <field name="value_type">quantity</field>
+      <field name="unit_code">KGM</field>
+      <field name="sequence">80</field>
+      <field name="note">Odoo keeps weight in the unit set under Inventory settings; change the fixed unit if that is pounds.</field>
+    </record>
+
+    <record id="mapping_product_gross_volume" model="openepcis.field.mapping">
+      <field name="model_name">product.product</field>
+      <field name="odoo_field">volume</field>
+      <field name="gs1_path">grossVolume</field>
+      <field name="value_type">quantity</field>
+      <field name="unit_code">MTQ</field>
+      <field name="sequence">90</field>
+      <field name="note">Odoo stores volume in cubic metres by default.</field>
+    </record>
+
+  </data>
+</odoo>

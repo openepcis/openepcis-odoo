@@ -1,0 +1,41 @@
+# A local Odoo with this addon mounted, for trying it by hand.
+#
+#   docker compose up -d
+#   # then http://localhost:8069, create a database, install "OpenEPCIS Connector"
+#
+# To run the test suite instead of a server:
+#
+#   docker compose run --rm odoo odoo -d test -i openepcis_connector \
+#     --test-enable --test-tags /openepcis_connector --stop-after-init
+#
+# Works with podman-compose as well.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: odoo
+      POSTGRES_PASSWORD: odoo
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  odoo:
+    image: odoo:18
+    depends_on:
+      - db
+    ports:
+      - "8069:8069"
+    environment:
+      HOST: db
+      USER: odoo
+      PASSWORD: odoo
+    volumes:
+      # The repository root is the addons path: the addon itself is the
+      # openepcis_connector directory inside it.
+      - .:/mnt/extra-addons:ro
+      - odoo-data:/var/lib/odoo
+
+volumes:
+  postgres-data:
+  odoo-data:

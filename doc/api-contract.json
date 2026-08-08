@@ -1,0 +1,174 @@
+{
+  "_comment": "The resolver endpoints this connector depends on: paths, verbs and the status codes they answer with, captured from a live deployment's /q/openapi. Interface facts only \u2014 no descriptive text is carried over, because the resolver's own summaries are not this project's to publish. The resolver ships neither an OpenAPI file nor a client SDK, so this is the contract of record. tools/check-contract.py compares it against a running deployment; a difference means the connector needs attention, not that this file needs editing.",
+  "capturedFrom": "https://id.dev.epcis.cloud/q/openapi",
+  "openapi": "3.1.0",
+  "endpoints": {
+    "/bulk/organizations": {
+      "post": {
+        "responses": [
+          "200",
+          "400",
+          "401",
+          "403"
+        ]
+      }
+    },
+    "/bulk/products": {
+      "post": {
+        "responses": [
+          "200",
+          "400",
+          "401",
+          "403"
+        ]
+      }
+    },
+    "/gpc/search": {
+      "get": {
+        "responses": [
+          "200",
+          "401",
+          "403"
+        ]
+      }
+    },
+    "/gs1de/keys": {
+      "get": {
+        "responses": [
+          "200",
+          "401",
+          "403"
+        ]
+      }
+    },
+    "/gs1de/keys/draw": {
+      "post": {
+        "responses": [
+          "200",
+          "400",
+          "401",
+          "403"
+        ]
+      }
+    },
+    "/gs1de/keys/{ai}/{key}": {
+      "delete": {
+        "responses": [
+          "200",
+          "401",
+          "403"
+        ]
+      }
+    },
+    "/gs1de/keys/{ai}/{key}/confirm": {
+      "post": {
+        "responses": [
+          "200",
+          "401",
+          "403"
+        ]
+      }
+    },
+    "/masterdata/verify/{key}": {
+      "get": {
+        "responses": [
+          "200",
+          "400",
+          "401",
+          "403",
+          "503"
+        ]
+      }
+    },
+    "/organizations/{globalLocationNumber}": {
+      "put": {
+        "responses": [
+          "200",
+          "201",
+          "400",
+          "401",
+          "403",
+          "500"
+        ]
+      },
+      "get": {
+        "responses": [
+          "200",
+          "401",
+          "403",
+          "404",
+          "500"
+        ]
+      },
+      "delete": {
+        "responses": [
+          "204",
+          "401",
+          "403",
+          "404",
+          "500"
+        ]
+      }
+    },
+    "/products": {
+      "get": {
+        "responses": [
+          "200",
+          "400",
+          "401",
+          "403",
+          "500"
+        ]
+      }
+    },
+    "/products/{gtin}": {
+      "put": {
+        "responses": [
+          "201",
+          "400",
+          "401",
+          "403",
+          "404",
+          "500"
+        ]
+      },
+      "patch": {
+        "responses": [
+          "200",
+          "400",
+          "401",
+          "403",
+          "404",
+          "500"
+        ]
+      },
+      "get": {
+        "responses": [
+          "200",
+          "401",
+          "403",
+          "404",
+          "500"
+        ]
+      },
+      "delete": {
+        "responses": [
+          "204",
+          "401",
+          "403",
+          "404",
+          "500"
+        ]
+      }
+    },
+    "/sync/channels": {
+      "get": {
+        "responses": [
+          "200",
+          "401",
+          "403"
+        ]
+      }
+    }
+  }
+}
