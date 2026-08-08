@@ -1,6 +1,6 @@
 {
   "_comment": "The resolver endpoints this connector depends on: paths, verbs and the status codes they answer with, captured from a live deployment's /q/openapi. Interface facts only \u2014 no descriptive text is carried over, because the resolver's own summaries are not this project's to publish. The resolver ships neither an OpenAPI file nor a client SDK, so this is the contract of record. tools/check-contract.py compares it against a running deployment; a difference means the connector needs attention, not that this file needs editing.",
-  "capturedFrom": "https://id.dev.epcis.cloud/q/openapi",
+  "capturedFrom": "a live deployment's /q/openapi",
   "openapi": "3.1.0",
   "endpoints": {
     "/bulk/organizations": {

@@ -8,6 +8,10 @@
     postal address, and `contactPoint[].email` and `contactPoint[].telephone`
     land in the same contact point rather than in two.
 
+    Sequences start at 110 rather than 10: the list sorts by sequence (the drag
+    handle needs that), so overlapping ranges would interleave the contact rows
+    with the product ones and make the screen hard to read.
+
     Localised terms are used even for fields Odoo does not translate — the
     catalog types organizationName and streetAddress as language maps, so a
     plain string would be refused. A single-language database simply gets one
@@ -20,7 +24,7 @@
       <field name="odoo_field">name</field>
       <field name="gs1_path">organizationName</field>
       <field name="value_type">localized</field>
-      <field name="sequence">10</field>
+      <field name="sequence">110</field>
     </record>
 
     <record id="mapping_partner_street" model="openepcis.field.mapping">
@@ -28,7 +32,7 @@
       <field name="odoo_field">street</field>
       <field name="gs1_path">address.streetAddress</field>
       <field name="value_type">localized</field>
-      <field name="sequence">20</field>
+      <field name="sequence">120</field>
     </record>
 
     <record id="mapping_partner_street2" model="openepcis.field.mapping">
@@ -36,7 +40,7 @@
       <field name="odoo_field">street2</field>
       <field name="gs1_path">address.streetAddressLine2</field>
       <field name="value_type">localized</field>
-      <field name="sequence">30</field>
+      <field name="sequence">130</field>
     </record>
 
     <record id="mapping_partner_city" model="openepcis.field.mapping">
@@ -44,7 +48,7 @@
       <field name="odoo_field">city</field>
       <field name="gs1_path">address.addressLocality</field>
       <field name="value_type">localized</field>
-      <field name="sequence">40</field>
+      <field name="sequence">140</field>
     </record>
 
     <record id="mapping_partner_zip" model="openepcis.field.mapping">
@@ -52,7 +56,7 @@
       <field name="odoo_field">zip</field>
       <field name="gs1_path">address.postalCode</field>
       <field name="value_type">text</field>
-      <field name="sequence">50</field>
+      <field name="sequence">150</field>
     </record>
 
     <record id="mapping_partner_state" model="openepcis.field.mapping">
@@ -60,7 +64,7 @@
       <field name="odoo_field">state_id.name</field>
       <field name="gs1_path">address.addressRegion</field>
       <field name="value_type">localized</field>
-      <field name="sequence">60</field>
+      <field name="sequence">160</field>
     </record>
 
     <record id="mapping_partner_country" model="openepcis.field.mapping">
@@ -68,7 +72,7 @@
       <field name="odoo_field">country_id.code</field>
       <field name="gs1_path">address.addressCountry.countryCode</field>
       <field name="value_type">text</field>
-      <field name="sequence">70</field>
+      <field name="sequence">170</field>
       <field name="note">ISO 3166-1 alpha-2.</field>
     </record>
 
@@ -77,7 +81,7 @@
       <field name="odoo_field">email</field>
       <field name="gs1_path">contactPoint[].email</field>
       <field name="value_type">text</field>
-      <field name="sequence">80</field>
+      <field name="sequence">180</field>
     </record>
 
     <record id="mapping_partner_phone" model="openepcis.field.mapping">
@@ -85,7 +89,7 @@
       <field name="odoo_field">phone</field>
       <field name="gs1_path">contactPoint[].telephone</field>
       <field name="value_type">text</field>
-      <field name="sequence">90</field>
+      <field name="sequence">190</field>
     </record>
 
     <record id="cron_publish_partners" model="ir.cron">
