@@ -243,6 +243,16 @@ class OpenepcisClient(models.AbstractModel):
             settings["offline_token"] = rotated
             _logger.info("OpenEPCIS: offline token rotated by the identity provider")
 
+        # An offline refresh token carries no preferred_username, so a token
+        # deposited by hand could only be labelled with its subject UUID. The
+        # access token does carry it, so the label is corrected the first time
+        # one is minted — which is when the information becomes available.
+        username = self._token_claims(access_token).get("preferred_username")
+        if username and company.sudo().openepcis_token_subject != username:
+            company.sudo().with_context(openepcis_syncing=True).write(
+                {"openepcis_token_subject": username}
+            )
+
         return access_token, int(body.get("expires_in") or 60)
 
     @api.model
@@ -259,6 +269,24 @@ class OpenepcisClient(models.AbstractModel):
         description = detail.get("error_description") or ""
 
         if code == "invalid_grant":
+            # A token is bound to the issuer URL it was minted under. Where two
+            # hostnames serve the same realm — an ingress alias and the canonical
+            # name — a token issued via one and refreshed via the other fails
+            # here, and reporting it as "revoked" sends the reader looking in
+            # entirely the wrong place. Keycloak names the expected issuer, so
+            # pass that through.
+            if "issuer" in description.lower():
+                return OpenepcisError(
+                    _(
+                        "The offline token was issued by a different URL than the "
+                        "one configured here: %(detail)s\n\nA token is bound to the "
+                        "issuer it was minted under. Use the same realm URL that "
+                        "issued it — an alias hostname for the same realm counts "
+                        "as different.",
+                        detail=description,
+                    ),
+                    status=response.status_code,
+                )
             return OpenepcisError(
                 _(
                     "The offline token is no longer accepted (%s). It has been "

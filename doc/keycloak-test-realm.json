@@ -1,0 +1,149 @@
+{
+  "realm": "openepcis-test",
+  "enabled": true,
+  "sslRequired": "none",
+  "accessTokenLifespan": 120,
+  "offlineSessionIdleTimeout": 2592000,
+  "roles": {
+    "realm": [
+      {
+        "name": "acme",
+        "description": "Tenant membership \u2014 a realm role named after the tenant"
+      },
+      {
+        "name": "acme/create",
+        "description": "Scoped capability, as AccessGuard parses it"
+      },
+      {
+        "name": "acme/update",
+        "description": "Scoped capability"
+      },
+      {
+        "name": "dpp-writer",
+        "description": "Capability role"
+      }
+    ]
+  },
+  "users": [
+    {
+      "username": "svc-odoo",
+      "enabled": true,
+      "email": "svc-odoo@example.test",
+      "emailVerified": true,
+      "firstName": "Odoo",
+      "lastName": "Connector",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "svc-odoo-password",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "acme",
+        "acme/create",
+        "acme/update",
+        "dpp-writer",
+        "offline_access"
+      ],
+      "attributes": {
+        "defaultGroup": [
+          "acme"
+        ],
+        "gs1CompanyPrefix": [
+          "9520000"
+        ]
+      }
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "odoo-connector",
+      "name": "Odoo connector",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "odoo-connector-test-secret",
+      "serviceAccountsEnabled": false,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "attributes": {
+        "standard.token.exchange.enabled": "true"
+      },
+      "fullScopeAllowed": true,
+      "protocolMappers": [
+        {
+          "name": "defaultGroup",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "defaultGroup",
+            "claim.name": "defaultGroup",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "gs1CompanyPrefix",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "gs1CompanyPrefix",
+            "claim.name": "gs1CompanyPrefix",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "backend-service",
+      "name": "Resolver (performs the exchange)",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "backend-service-test-secret",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "attributes": {
+        "standard.token.exchange.enabled": "true"
+      },
+      "fullScopeAllowed": true,
+      "protocolMappers": [
+        {
+          "name": "defaultGroup",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "defaultGroup",
+            "claim.name": "defaultGroup",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "gs1CompanyPrefix",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "gs1CompanyPrefix",
+            "claim.name": "gs1CompanyPrefix",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ]
+}
