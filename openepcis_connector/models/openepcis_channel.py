@@ -43,13 +43,10 @@ class OpenepcisChannel(models.Model):
     )
     fetched_on = fields.Datetime(readonly=True)
 
-    _sql_constraints = [
-        (
-            "channel_company_unique",
-            "unique(channel_id, company_id)",
-            "A channel is listed once per company.",
-        ),
-    ]
+    _channel_company_unique = models.Constraint(
+        "unique (channel_id, company_id)",
+        "A channel is listed once per company.",
+    )
 
     # ------------------------------------------------------------------
 

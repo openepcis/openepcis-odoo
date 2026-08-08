@@ -35,13 +35,13 @@ class ResPartner(models.Model):
         "the last of which is a check digit.",
     )
 
-    _sql_constraints = [
-        (
-            "openepcis_gln_unique",
-            "unique(openepcis_gln)",
-            "A GLN identifies exactly one party — this one is already in use.",
-        ),
-    ]
+    # Odoo 19 declares table constraints this way; the 18.0 branch still uses
+    # _sql_constraints, which 19 accepts silently and then ignores — meaning the
+    # constraint would simply not exist and two parties could share a GLN.
+    _openepcis_gln_unique = models.Constraint(
+        "unique (openepcis_gln)",
+        "A GLN identifies exactly one party — this one is already in use.",
+    )
 
     @api.constrains("openepcis_gln")
     def _check_openepcis_gln(self):

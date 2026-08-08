@@ -13,7 +13,7 @@ being typed a second time.
 | | |
 |---|---|
 | **Licence** | LGPL-3 |
-| **Odoo** | 18.0 (branch `18.0`), 19.0 (branch `19.0`) |
+| **Odoo** | 19.0 — this branch. For 18.0 see branch [`18.0`](../../tree/18.0). |
 | **Dependencies** | `product` only. No Python packages beyond what Odoo ships. |
 | **Direction** | Odoo → OpenEPCIS. See [Limits](#limits). |
 | **Auth** | OIDC offline token — no static key, no stored password |
@@ -273,9 +273,26 @@ logic is deliberately version-neutral Python and the views avoid custom
 JavaScript — the GPC picker is a wizard rather than an autocomplete widget for
 exactly this reason — so a port stays cheap.
 
+In practice the two branches differ in exactly one place, and it is worth knowing
+which, because Odoo does not fail loudly about it:
+
+**Table constraints.** Odoo 19 declares them as `models.Constraint`, which does not
+exist in 18; 18.0 still uses `_sql_constraints`, which 19 accepts, warns about once,
+and then **ignores** — so on 19 the old form would leave the GLN uniqueness rule
+uncreated and two contacts could share one. Anything moved between the branches has
+to be checked for this, because only one of the two directions fails loudly.
+
+Installing the wrong branch, at least, cannot happen quietly: Odoo 18 refuses a
+manifest version of `19.0.x` outright, before it loads any Python.
+
+The units of measure look like a second difference but are not: Odoo 19 renamed some
+records (`product_uom_mm` became `product_uom_millimeter`) and added others
+(`product_uom_milliliter`). Both spellings are listed in one table and a name the
+running release does not have is skipped, so the same file serves both.
+
 ### About the screenshots
 
-Odoo 18 with demo data. Hostnames are `example.org` placeholders, the published
+Odoo 19 with demo data. Hostnames are `example.org` placeholders, the published
 states were seeded locally, so nothing shown was ever registered anywhere, and
 every identifier is in the reserved 952 test range — check digits included, which
 were verified against the platform's own validator rather than this addon's.

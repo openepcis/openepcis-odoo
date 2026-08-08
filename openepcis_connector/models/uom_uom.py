@@ -29,6 +29,13 @@ REC20_BY_XMLID = {
     "uom.product_uom_km": "KMT",
     "uom.product_uom_cm": "CMT",
     "uom.product_uom_mm": "MMT",
+    # Odoo 19 renamed some of these and added others. Both spellings are listed
+    # so one table serves both releases; a name the running release does not have
+    # is simply skipped.
+    "uom.product_uom_millimeter": "MMT",
+    "uom.product_uom_milliliter": "MLT",
+    "uom.product_uom_minute": "MIN",
+    "uom.product_uom_kwh": "KWH",
     "uom.product_uom_mile": "SMI",
     "uom.product_uom_foot": "FOT",
     "uom.product_uom_inch": "INH",
@@ -37,6 +44,10 @@ REC20_BY_XMLID = {
     "uom.product_uom_square_foot": "FTK",
     "uom.product_uom_day": "DAY",
     "uom.product_uom_hour": "HUR",
+    # Deliberately absent: uom.product_uom_pack_6. "Pack of 6" is a packaging
+    # count, not a UN/CEFACT measure, and guessing a code for it would put a
+    # wrong unit on a published measurement. A record that uses it is reported
+    # as incomplete instead — see OpenepcisFieldMapping._has_value.
 }
 
 

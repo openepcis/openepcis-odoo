@@ -211,7 +211,11 @@ class OpenepcisFieldMapping(models.Model):
         if raw is None or raw is False or raw == "":
             return False
         if self.value_type == "quantity":
-            return bool(float(raw))
+            # A unit that carries no UN/CEFACT code cannot be published, so the
+            # readiness check must not call this satisfied — otherwise the form
+            # shows a filled-in measurement while the document goes out without
+            # it, and nothing anywhere says so.
+            return bool(float(raw)) and bool(self._unit_code(record))
         return True
 
     def _extract_localized(self, record):
@@ -231,18 +235,35 @@ class OpenepcisFieldMapping(models.Model):
                 values[tag] = text
         return values or None
 
+    def _unit_code(self, record):
+        """The UN/CEFACT code this row would send, or an empty string.
+
+        Empty means the unit has no code — either because none is configured or
+        because the chosen unit of measure has no ``openepcis_rec20_code``. Odoo
+        does not ship a code for every unit it ships, and inventing one would put
+        a wrong unit on a published measurement.
+        """
+        self.ensure_one()
+        unit = self.unit_code or ""
+        if self.unit_field:
+            uom = self._traverse(record, self.unit_field)
+            if uom is not None and uom is not False and getattr(uom, "_name", None) == "uom.uom":
+                unit = uom.openepcis_rec20_code or unit
+        return unit
+
     def _as_quantity(self, record, raw):
         value = float(raw)
         if not value:
             # A measurement of zero is Odoo's "not filled in" for weight and
             # volume, and sending it would satisfy a requirement falsely.
             return None
-        unit = self.unit_code
-        if self.unit_field:
-            uom = self._traverse(record, self.unit_field)
-            if uom is not None and uom is not False and getattr(uom, "_name", None) == "uom.uom":
-                unit = uom.openepcis_rec20_code or unit
+        unit = self._unit_code(record)
         if not unit:
+            # A quantity without a unit is not a measurement, so it is dropped
+            # rather than sent half-formed. _has_value agrees with this, which is
+            # what stops the omission from being silent: the readiness line
+            # reports the term as still needed instead of the value vanishing
+            # between a filled-in form and the published document.
             return None
         return {"value": value, "unitCode": unit}
 

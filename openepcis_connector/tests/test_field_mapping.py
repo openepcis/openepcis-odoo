@@ -104,3 +104,27 @@ class TestFieldMapping(OpenepcisCase):
         product = self._product()
         self.assertNotIn("gtin", self._payload(product))
         self.assertEqual(product._openepcis_payload()["gtin"], TEST_GTIN)
+
+    def test_a_unit_without_a_cefact_code_is_not_published_silently(self):
+        # Odoo does not ship a UN/CEFACT code for every unit it ships. A
+        # measurement whose unit has none cannot go out, and the readiness check
+        # has to agree — otherwise the form shows a filled-in net content while
+        # the document goes without it, and nothing says so.
+        self.env["openepcis.channel"].create(
+            {
+                "channel_id": "test",
+                "name": "Test destination",
+                "company_id": self.company.id,
+                "enabled": True,
+                "required_terms_json": '{"PRODUCT": ["gs1:netContent"]}',
+            }
+        )
+        codeless = self.env["uom.uom"].search([("openepcis_rec20_code", "=", False)], limit=1)
+        if not codeless:
+            codeless = self.env.ref("uom.product_uom_unit").copy(
+                {"name": "Unit with no code", "openepcis_rec20_code": False}
+            )
+        product = self._product(openepcis_net_content_uom_id=codeless.id)
+
+        self.assertNotIn("netContent", self._payload(product))
+        self.assertIn("netContent", product.openepcis_missing_terms)
