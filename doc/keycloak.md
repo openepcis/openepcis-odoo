@@ -67,11 +67,34 @@ Worth stating plainly, because it was the intended design:
   authorization is enabled and per-client exchange permissions are configured. It
   is a deprecated preview feature.
 
-**So an offline token is issued the ordinary way: an authorization-code flow with
-`scope=offline_access` and `prompt=consent` against the connector client.** A human
-is present, consents, and the resulting token is bound to that client — which is
-also what makes per-connector revocation possible. Nothing here needs a preview
-feature.
+## An offline token is issued the ordinary way — measured
+
+An authorization-code flow with `scope=offline_access` against the connector
+client, driven through a real browser against Keycloak 26.2.5, **with
+`directAccessGrantsEnabled: false`** — the password grant off, as it must be in
+production:
+
+```
+refresh typ        : Offline
+refresh_expires_in : 0            (never expires)
+scope              : openid profile offline_access email
+defaultGroup       : acme
+gs1CompanyPrefix   : 9520000
+tenant role acme   : yes
+```
+
+A human is present, and the resulting token is bound to that client — which is what
+makes per-connector revocation possible. No preview feature, no token exchange, no
+password grant.
+
+Two things the run settled that are easy to get wrong:
+
+- **The client needs `redirectUris`.** Without one, `authorize` answers
+  `Invalid parameter: redirect_uri` before any login screen appears.
+- **`prompt=consent` produced no consent screen** here, because the client has
+  `consentRequired: false`. If an explicit consent step is wanted — and for handing
+  a long-lived credential to a third party it probably is — set
+  `consentRequired: true` on the client.
 
 ## A token is bound to its issuer URL
 
