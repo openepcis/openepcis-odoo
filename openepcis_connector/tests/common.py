@@ -17,6 +17,7 @@ from odoo.tests.common import TransactionCase
 
 from ..models.openepcis_client import OpenepcisClient
 from ..utils.exceptions import OpenepcisError
+from ..vendor.benelog_client.core.auth import OfflineTokenAuth
 
 CLIENT_REQUEST = "odoo.addons.openepcis_connector.models.openepcis_client.OpenepcisClient.request"
 
@@ -52,7 +53,14 @@ class OpenepcisCase(TransactionCase):
         handling itself must not have it stubbed out from under them, and a stub
         installed for everyone would have hidden exactly the bugs those tests
         exist to catch.
+
+        Patches both seams: the library's ``bearer()`` (which the vendored
+        transport calls) and the adapter's ``_access_token`` (which
+        ``diagnose`` calls).
         """
+        patcher = patch.object(OfflineTokenAuth, "bearer", lambda _self: value)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         patcher = patch.object(
             OpenepcisClient,
             "_access_token",
