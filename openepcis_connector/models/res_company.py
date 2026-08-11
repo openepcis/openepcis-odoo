@@ -31,10 +31,11 @@ class ResCompany(models.Model):
         "Also the prefix of every Digital Link this connector shows.",
     )
     openepcis_oidc_issuer = fields.Char(
-        string="Keycloak realm URL",
-        help="The realm that issues tokens, e.g. "
-        "https://auth.epcis.cloud/realms/openepcis. Its endpoints are discovered "
-        "from there, so nothing else needs configuring.",
+        string="Keycloak realm URL (optional)",
+        help="Usually leave this empty: the realm is discovered from the resolver "
+        "itself (RFC 9728 protected-resource metadata). Set it only for a "
+        "resolver that does not publish that metadata, e.g. "
+        "https://auth.epcis.cloud/realms/openepcis.",
     )
     openepcis_client_id = fields.Char(
         string="Client ID",
