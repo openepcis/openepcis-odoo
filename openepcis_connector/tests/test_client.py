@@ -1,21 +1,23 @@
 # Part of the OpenEPCIS connector for Odoo. See LICENSE (LGPL-3).
-"""The HTTP client: configuration, tokens, error mapping, diagnosis.
+"""The client adapter: configuration, token persistence, phrasing, diagnosis.
 
-The token handling is where the care goes. Three properties are worth defending,
-because getting any of them wrong is either a lock-out or a lie:
+Transport and retry mechanics live in the vendored ``benelog_client`` and are
+tested in that repository. What belongs to *this* addon — and is defended
+here — is the seam: settings come off ``res.company`` with a translated
+dialog when incomplete, a rotated offline token lands back on the company
+record, the token subject is corrected from the first minted access token,
+and the library's structured errors surface as translated ``OpenepcisError``
+messages an administrator can act on.
 
-- a rotated refresh token must be stored, or the next refresh fails with a
-  credential that looks unchanged in the settings;
-- a 401 must be re-authorised exactly once, and that must not count as repeating
-  the operation — otherwise a POST that was refused never gets its second chance,
-  or worse, one that succeeded gets sent twice;
-- a revoked offline token must say so, rather than being reported as a resolver
-  problem.
+The token tests stub ``requests.Session`` underneath the vendored library, so
+the whole stack from the Odoo model down to the wire format runs for real.
 """
 
 import base64
 import json
 from unittest.mock import patch
+
+import requests
 
 from odoo.exceptions import UserError, ValidationError
 from odoo.tests import tagged
@@ -23,11 +25,12 @@ from odoo.tests import tagged
 from ..models import openepcis_client as client_module
 from ..models.openepcis_client import OpenepcisClient
 from ..utils.exceptions import OpenepcisError
+from ..vendor.benelog_client.core import auth as lib_auth
+from ..vendor.benelog_client.core import client as lib_client
 from .common import OpenepcisCase
 
-MODULE = "odoo.addons.openepcis_connector.models.openepcis_client"
-
-DISCOVERY = {"token_endpoint": "https://auth.example.test/realms/openepcis/token"}
+ISSUER = "https://auth.example.test/realms/openepcis"
+DISCOVERY = {"token_endpoint": ISSUER + "/token"}
 
 
 class _Answer:
@@ -47,8 +50,32 @@ def _json(payload, status=200):
     return _Answer(status, json.dumps(payload).encode())
 
 
+def _jwt(claims):
+    payload = base64.urlsafe_b64encode(json.dumps(claims).encode()).decode().rstrip("=")
+    return "header.%s.signature" % payload
+
+
+class ClientCase(OpenepcisCase):
+    """Shared cache hygiene: never reuse an auth minted by another test."""
+
+    def setUp(self):
+        super().setUp()
+        for cache in (
+            client_module._CLIENTS,
+            lib_auth._PROTECTED_RESOURCE,
+            lib_auth._OIDC_CONFIG,
+        ):
+            cache.clear()
+            self.addCleanup(cache.clear)
+
+    def _patch(self, target, name, value):
+        patcher = patch.object(target, name, value)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+
 @tagged("post_install", "-at_install")
-class TestConfiguration(OpenepcisCase):
+class TestConfiguration(ClientCase):
     def test_missing_settings_name_what_is_missing(self):
         self.company.openepcis_offline_token = False
         with self.assertRaises(UserError) as caught:
@@ -86,13 +113,8 @@ class TestConfiguration(OpenepcisCase):
                 "https://auth.example.test/realms/x/.well-known/openid-configuration"
             )
 
-    @staticmethod
-    def _jwt(claims):
-        payload = base64.urlsafe_b64encode(json.dumps(claims).encode()).decode().rstrip("=")
-        return "header.%s.signature" % payload
-
     def test_depositing_a_token_records_who_it_belongs_to(self):
-        self.company.openepcis_offline_token = self._jwt(
+        self.company.openepcis_offline_token = _jwt(
             {"preferred_username": "svc-odoo", "typ": "Offline"}
         )
         self.assertEqual(self.company.openepcis_token_subject, "svc-odoo")
@@ -101,7 +123,7 @@ class TestConfiguration(OpenepcisCase):
         # It would work for a few minutes and then stop, long after whoever
         # pasted it has moved on.
         with self.assertRaises(ValidationError) as caught:
-            self.company.openepcis_offline_token = self._jwt(
+            self.company.openepcis_offline_token = _jwt(
                 {"preferred_username": "someone", "typ": "Refresh"}
             )
         self.assertIn("offline_access", str(caught.exception))
@@ -114,7 +136,7 @@ class TestConfiguration(OpenepcisCase):
 
 
 @tagged("post_install", "-at_install")
-class TestErrorClassification(OpenepcisCase):
+class TestErrorClassification(ClientCase):
     def test_a_gateway_timeout_is_worth_retrying(self):
         self.assertTrue(OpenepcisError("timeout", status=504).is_retryable)
 
@@ -133,30 +155,14 @@ class TestErrorClassification(OpenepcisCase):
 
 
 @tagged("post_install", "-at_install")
-class TestTokens(OpenepcisCase):
-    """The real token path — deliberately not stubbed here."""
+class TestTokens(ClientCase):
+    """The real token path, through the vendored library — not stubbed."""
 
     def setUp(self):
         super().setUp()
-        client_module._ACCESS_TOKENS.clear()
-        client_module._OIDC_CONFIG.clear()
-        client_module._PROTECTED_RESOURCE.clear()
-        self.addCleanup(client_module._ACCESS_TOKENS.clear)
-        self.addCleanup(client_module._OIDC_CONFIG.clear)
-        self.addCleanup(client_module._PROTECTED_RESOURCE.clear)
-        # Discovery pre-seeded: this suite is about the token exchange, not
-        # about reading a well-known document.
-        client_module._OIDC_CONFIG["https://auth.example.test/realms/openepcis"] = DISCOVERY
-
-    @staticmethod
-    def _jwt_for(claims):
-        payload = base64.urlsafe_b64encode(json.dumps(claims).encode()).decode().rstrip("=")
-        return "header.%s.signature" % payload
-
-    def _patch(self, name, value):
-        patcher = patch("%s.%s" % (MODULE, name), value)
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        # Discovery pre-seeded: this suite is about the token exchange and
+        # its writebacks, not about reading a well-known document.
+        lib_auth._OIDC_CONFIG[ISSUER] = DISCOVERY
 
     def _transport(self, token_answers, api_answers=None):
         """Answer the token endpoint and the resolver through separate stubs."""
@@ -164,17 +170,17 @@ class TestTokens(OpenepcisCase):
         tokens = list(token_answers)
         apis = list(api_answers or [_json({})])
 
-        def fake_post(url, **kw):
+        def fake_post(_session, url, **kw):
             calls["token"].append(kw.get("data"))
             return tokens[min(len(calls["token"]) - 1, len(tokens) - 1)]
 
-        def fake_request(method, url, **kw):
+        def fake_request(_session, method, url, **kw):
             calls["api"].append(kw.get("headers", {}).get("Authorization"))
             return apis[min(len(calls["api"]) - 1, len(apis) - 1)]
 
-        self._patch("requests.post", fake_post)
-        self._patch("requests.request", fake_request)
-        self._patch("BACKOFF_SECONDS", (0, 0))
+        self._patch(requests.Session, "post", fake_post)
+        self._patch(requests.Session, "request", fake_request)
+        self._patch(lib_client, "BACKOFF_SECONDS", (0, 0))
         return calls
 
     def test_the_access_token_is_minted_from_the_offline_token(self):
@@ -191,9 +197,10 @@ class TestTokens(OpenepcisCase):
         self.env["openepcis.client"].get("/products")
         self.assertEqual(len(calls["token"]), 1, "one mint, two calls")
 
-    def test_a_rotated_refresh_token_is_stored(self):
+    def test_a_rotated_refresh_token_is_stored_on_the_company(self):
         # Keycloak rotates when "Revoke Refresh Token" is on. Losing the new one
-        # locks the connector out at the next refresh.
+        # locks the connector out at the next refresh. The library hands the
+        # replacement to OdooTokenStore, and it must land on the record.
         self._transport(
             [_json({"access_token": "a", "expires_in": 300, "refresh_token": "rotated.value"})]
         )
@@ -213,6 +220,28 @@ class TestTokens(OpenepcisCase):
         with self.assertRaises(OpenepcisError) as caught:
             self.env["openepcis.client"].get("/products")
         self.assertIn("client ID", str(caught.exception))
+
+    def test_an_issuer_mismatch_is_not_reported_as_revoked(self):
+        # Two hostnames can serve one realm — an ingress alias and the canonical
+        # name. A token minted via one and refreshed via the other fails with
+        # invalid_grant, and calling that "revoked" sends the reader hunting in
+        # Keycloak for a session that is perfectly intact.
+        self._transport(
+            [
+                _json(
+                    {
+                        "error": "invalid_grant",
+                        "error_description": "Invalid token issuer. Expected '%s'" % ISSUER,
+                    },
+                    400,
+                )
+            ]
+        )
+        with self.assertRaises(OpenepcisError) as caught:
+            self.env["openepcis.client"].get("/products")
+        message = str(caught.exception)
+        self.assertIn("issued by a different URL", message)
+        self.assertNotIn("revoked", message)
 
     def test_a_401_is_reauthorised_once(self):
         calls = self._transport(
@@ -242,74 +271,41 @@ class TestTokens(OpenepcisCase):
         self.assertEqual(result, {"key": "9520000000028"})
         self.assertEqual(len(calls["api"]), 2)
 
-    def test_a_second_401_is_not_reauthorised_again(self):
-        calls = self._transport(
-            [_json({"access_token": "any", "expires_in": 300})],
-            [_Answer(401)],
-        )
-        with self.assertRaises(OpenepcisError):
-            self.env["openepcis.client"].post("/gs1de/keys/draw", {"ai": "01"})
-        self.assertEqual(len(calls["api"]), 2, "one retry, then it gives up")
-
-    def test_an_issuer_mismatch_is_not_reported_as_revoked(self):
-        # Two hostnames can serve one realm — an ingress alias and the canonical
-        # name. A token minted via one and refreshed via the other fails with
-        # invalid_grant, and calling that "revoked" sends the reader hunting in
-        # Keycloak for a session that is perfectly intact.
-        self._transport(
-            [
-                _json(
-                    {
-                        "error": "invalid_grant",
-                        "error_description": "Invalid token issuer. Expected 'https://auth.example.test/realms/openepcis'",
-                    },
-                    400,
-                )
-            ]
-        )
-        with self.assertRaises(OpenepcisError) as caught:
-            self.env["openepcis.client"].get("/products")
-        message = str(caught.exception)
-        self.assertIn("issued by a different URL", message)
-        self.assertNotIn("revoked", message)
-
     def test_the_token_label_is_corrected_from_the_access_token(self):
         # An offline refresh token carries no preferred_username, so a pasted
         # token can only be labelled with its subject UUID until the first mint.
         self.company.openepcis_token_subject = "0c842b8e-uuid-looking"
-        access = self._jwt_for({"preferred_username": "svc-odoo"})
+        access = _jwt({"preferred_username": "svc-odoo"})
         self._transport([_json({"access_token": access, "expires_in": 300})])
         self.env["openepcis.client"].get("/products")
         self.assertEqual(self.company.openepcis_token_subject, "svc-odoo")
 
-    def test_a_realm_that_is_not_a_realm_is_explained(self):
-        client_module._OIDC_CONFIG.clear()
-        patch(
-            "%s.requests.get" % MODULE,
-            lambda url, **kw: _Answer(404, b"not found", "text/plain"),
-        ).start()
-        with self.assertRaises(OpenepcisError) as caught:
-            self.env["openepcis.client"]._oidc_config("https://auth.example.test/realms/openepcis")
-        self.assertIn("/realms/", str(caught.exception))
+    def test_a_changed_setting_builds_a_fresh_client(self):
+        # The client cache is keyed by the settings; editing the client ID must
+        # not keep exchanging under the old one.
+        self._transport([_json({"access_token": "fresh", "expires_in": 300})])
+        self.env["openepcis.client"].get("/products")
+        before = len(client_module._CLIENTS)
+        self.company.openepcis_client_id = "renamed-connector"
+        self.env["openepcis.client"].get("/products")
+        self.assertEqual(len(client_module._CLIENTS), before + 1)
 
 
 @tagged("post_install", "-at_install")
-class TestRetry(OpenepcisCase):
-    """Retrying is only safe for verbs the catalog treats as repeatable."""
+class TestRetry(ClientCase):
+    """The retry policy is the library's; asserted once through the adapter."""
 
     def _transport(self, statuses):
         self.stub_access_token()
         calls = []
         answers = list(statuses)
 
-        def fake(method, url, **kw):
+        def fake(_session, method, url, **kw):
             calls.append(method)
             return _Answer(answers[min(len(calls) - 1, len(answers) - 1)])
 
-        for target, value in (("requests.request", fake), ("BACKOFF_SECONDS", (0, 0))):
-            patcher = patch("%s.%s" % (MODULE, target), value)
-            patcher.start()
-            self.addCleanup(patcher.stop)
+        self._patch(requests.Session, "request", fake)
+        self._patch(lib_client, "BACKOFF_SECONDS", (0, 0))
         return calls
 
     def test_a_put_is_retried_after_a_gateway_error(self):
@@ -325,34 +321,20 @@ class TestRetry(OpenepcisCase):
             self.env["openepcis.client"].post("/gs1de/keys/draw", {"ai": "01"})
         self.assertEqual(len(calls), 1)
 
-    def test_retrying_eventually_gives_up(self):
-        calls = self._transport([503])
-        with self.assertRaises(OpenepcisError):
-            self.env["openepcis.client"].get("/products")
-        self.assertEqual(len(calls), 3, "three attempts, then the error surfaces")
-
-    def test_a_validation_failure_is_not_retried(self):
-        calls = self._transport([400])
-        with self.assertRaises(OpenepcisError):
-            self.env["openepcis.client"].put("/products/9520000000004", {})
-        self.assertEqual(len(calls), 1, "a bad body will be just as bad next time")
-
     def test_an_html_answer_is_explained_rather_than_called_bad_json(self):
         self.stub_access_token()
-        patcher = patch(
-            "%s.requests.request" % MODULE,
-            lambda method, url, **kw: _Answer(200, b"<html>login</html>", "text/html"),
+        self._patch(
+            requests.Session,
+            "request",
+            lambda _session, method, url, **kw: _Answer(200, b"<html>login</html>", "text/html"),
         )
-        patcher.start()
-        self.addCleanup(patcher.stop)
-
         with self.assertRaises(OpenepcisError) as caught:
             self.env["openepcis.client"].get("/products")
         self.assertIn("web page", str(caught.exception))
 
 
 @tagged("post_install", "-at_install")
-class TestDiagnosis(OpenepcisCase):
+class TestDiagnosis(ClientCase):
     def _diagnose(self, answers):
         """Run the diagnosis with a canned answer per path prefix."""
 
@@ -365,9 +347,7 @@ class TestDiagnosis(OpenepcisCase):
             return {}
 
         self.stub_access_token()
-        patcher = patch.object(OpenepcisClient, "request", fake_request)
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        self._patch(OpenepcisClient, "request", fake_request)
         return self.env["openepcis.client"].diagnose(company=self.company)
 
     def test_the_token_is_checked_before_anything_downstream(self):
@@ -376,16 +356,13 @@ class TestDiagnosis(OpenepcisCase):
         self.assertTrue(all(ok for _n, ok, _d in checks))
 
     def test_a_rejected_token_stops_the_diagnosis(self):
-        patcher = patch.object(
+        self._patch(
             OpenepcisClient,
             "_access_token",
             lambda _self, company, force=False: (_ for _ in ()).throw(
                 OpenepcisError("The offline token is no longer accepted")
             ),
         )
-        patcher.start()
-        self.addCleanup(patcher.stop)
-
         checks = self.env["openepcis.client"].diagnose(company=self.company)
         self.assertEqual(len(checks), 1, "nothing downstream is worth probing")
         self.assertFalse(checks[0][1])
@@ -417,90 +394,49 @@ class TestDiagnosis(OpenepcisCase):
 
 
 @tagged("post_install", "-at_install")
-class TestDiscovery(OpenepcisCase):
+class TestDiscovery(ClientCase):
     """The realm is discovered from the resolver (RFC 9728), not pasted in.
 
-    An administrator configures one URL — the resolver's — and the authorization
-    server is read from its protected-resource metadata. A configured realm URL
-    stays as an override for a resolver that publishes none.
+    The discovery itself is the library's; what the adapter owes is the
+    wiring — no realm configured means discovery runs, a configured realm
+    means it never does.
     """
 
-    def setUp(self):
-        super().setUp()
-        client_module._PROTECTED_RESOURCE.clear()
-        client_module._OIDC_CONFIG.clear()
-        self.addCleanup(client_module._PROTECTED_RESOURCE.clear)
-        self.addCleanup(client_module._OIDC_CONFIG.clear)
-
-    def _metadata(self, answer):
+    def test_the_realm_is_discovered_from_the_resolver(self):
+        self.company.openepcis_oidc_issuer = False
         seen = {}
 
-        def fake(url, **kw):
+        def fake_get(_session, url, **kw):
             seen["url"] = url
-            return answer
+            return _json({"authorization_servers": [ISSUER]})
 
-        patch("%s.requests.get" % MODULE, fake).start()
-        self.addCleanup(patch.stopall)
-        return seen
-
-    def test_the_realm_is_discovered_from_the_resolver(self):
-        # No realm configured: it must be read from the resolver's metadata.
-        self.company.openepcis_oidc_issuer = False
-        seen = self._metadata(
-            _json(
-                {
-                    "resource": "https://id.example.test",
-                    "authorization_servers": ["https://auth.example.test/realms/openepcis"],
-                }
-            )
-        )
-        settings = self.env["openepcis.client"]._settings(company=self.company)
-        self.assertEqual(settings["issuer"], "https://auth.example.test/realms/openepcis")
+        self._patch(requests.Session, "get", fake_get)
+        auth, _client = self.env["openepcis.client"]._bound(self.company)
+        self.assertEqual(auth.issuer(), ISSUER)
         self.assertEqual(
             seen["url"], "https://id.example.test/.well-known/oauth-protected-resource"
         )
 
     def test_a_configured_realm_overrides_discovery(self):
-        # With a realm URL set, discovery is not consulted at all.
         called = {"n": 0}
 
-        def fake(url, **kw):
+        def fake_get(_session, url, **kw):
             called["n"] += 1
             return _json({})
 
-        patch("%s.requests.get" % MODULE, fake).start()
-        self.addCleanup(patch.stopall)
-        settings = self.env["openepcis.client"]._settings(company=self.company)
-        self.assertEqual(settings["issuer"], "https://auth.example.test/realms/openepcis")
+        self._patch(requests.Session, "get", fake_get)
+        auth, _client = self.env["openepcis.client"]._bound(self.company)
+        self.assertEqual(auth.issuer(), ISSUER)
         self.assertEqual(called["n"], 0, "a configured realm must not trigger discovery")
 
     def test_a_resolver_without_metadata_is_explained(self):
         self.company.openepcis_oidc_issuer = False
-        self._metadata(_Answer(404, b"not found", "text/plain"))
-        with self.assertRaises(OpenepcisError) as caught:
-            self.env["openepcis.client"]._settings(company=self.company)
-        message = str(caught.exception)
-        self.assertIn("does not publish OAuth metadata", message)
-        self.assertIn("manually", message)
-
-    def test_metadata_without_an_authorization_server_is_explained(self):
-        self.company.openepcis_oidc_issuer = False
-        self._metadata(_json({"resource": "https://id.example.test"}))
-        with self.assertRaises(OpenepcisError) as caught:
-            self.env["openepcis.client"]._settings(company=self.company)
-        self.assertIn("no authorization server", str(caught.exception))
-
-    def test_discovery_is_cached_per_resolver(self):
-        self.company.openepcis_oidc_issuer = False
-        called = {"n": 0}
-
-        def fake(url, **kw):
-            called["n"] += 1
-            return _json({"authorization_servers": ["https://auth.example.test/realms/openepcis"]})
-
-        patch("%s.requests.get" % MODULE, fake).start()
-        self.addCleanup(patch.stopall)
-        client = self.env["openepcis.client"]
-        client._settings(company=self.company)
-        client._settings(company=self.company)
-        self.assertEqual(called["n"], 1, "the metadata is read once per resolver, then cached")
+        self._patch(
+            requests.Session,
+            "get",
+            lambda _session, url, **kw: _Answer(404, b"not found", "text/plain"),
+        )
+        auth, _client = self.env["openepcis.client"]._bound(self.company)
+        with self.assertRaises(Exception) as caught:
+            auth.issuer()
+        self.assertIn("does not publish OAuth metadata", str(caught.exception))

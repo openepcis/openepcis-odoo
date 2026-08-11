@@ -43,6 +43,17 @@ jobs:
         run: |
           mkdir -p _probe
           cp -r openepcis_connector/utils _probe/utils
+          # utils/gs1.py re-exports from the vendored library, so the probe
+          # needs the gs1 slice of the vendor tree at the same relative
+          # position — only the slice, because unittest discovery imports
+          # every package it walks and the transport modules need requests.
+          mkdir -p _probe/vendor/benelog_client/core
+          cp openepcis_connector/vendor/__init__.py _probe/vendor/
+          cp openepcis_connector/vendor/benelog_client/__init__.py _probe/vendor/benelog_client/
+          cp openepcis_connector/vendor/benelog_client/core/__init__.py \
+             openepcis_connector/vendor/benelog_client/core/gs1.py \
+             openepcis_connector/vendor/benelog_client/core/errors.py \
+             _probe/vendor/benelog_client/core/
           mkdir -p _probe/tests
           cp openepcis_connector/tests/test_gs1.py _probe/tests/
           touch _probe/__init__.py _probe/tests/__init__.py
