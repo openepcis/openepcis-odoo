@@ -34,8 +34,7 @@
                 <div class="row">
                   <label for="openepcis_oidc_issuer" class="col-lg-3 o_light_label"/>
                   <field name="openepcis_oidc_issuer"
-                         placeholder="https://auth.epcis.cloud/realms/openepcis"
-                         required="openepcis_enabled"/>
+                         placeholder="discovered from the resolver — leave empty"/>
                 </div>
                 <div class="row">
                   <label for="openepcis_client_id" class="col-lg-3 o_light_label"/>

@@ -78,6 +78,12 @@ _ACCESS_TOKENS = {}
 #: invalidation.
 _OIDC_CONFIG = {}
 
+#: Authorization server (Keycloak realm) discovered from a resolver's OAuth 2.0
+#: Protected Resource Metadata (RFC 9728), keyed by resolver base URL. Same
+#: rationale and lifetime as _OIDC_CONFIG: it changes only when the deployment is
+#: reconfigured, so a restart is an acceptable cache invalidation.
+_PROTECTED_RESOURCE = {}
+
 
 class OpenepcisClient(models.AbstractModel):
     _name = "openepcis.client"
@@ -98,11 +104,13 @@ class OpenepcisClient(models.AbstractModel):
         # sudo: an ordinary user may publish a product without being allowed to
         # read the offline token, which is restricted to administrators.
         company = company.sudo()
+        # The realm URL is no longer required: it is discovered from the resolver
+        # itself (RFC 9728, see _discover_issuer). openepcis_oidc_issuer stays as
+        # an optional override for a deployment that does not publish the metadata.
         missing = [
             label
             for field, label in (
                 ("openepcis_base_url", _("resolver URL")),
-                ("openepcis_oidc_issuer", _("Keycloak realm URL")),
                 ("openepcis_client_id", _("client ID")),
                 ("openepcis_offline_token", _("offline token")),
             )
@@ -117,9 +125,11 @@ class OpenepcisClient(models.AbstractModel):
                     missing=", ".join(missing),
                 )
             )
+        base_url = company.openepcis_base_url.rstrip("/")
+        override = (company.openepcis_oidc_issuer or "").rstrip("/")
         return {
-            "base_url": company.openepcis_base_url.rstrip("/"),
-            "issuer": company.openepcis_oidc_issuer.rstrip("/"),
+            "base_url": base_url,
+            "issuer": override or self._discover_issuer(base_url),
             "client_id": company.openepcis_client_id,
             "client_secret": company.openepcis_client_secret or "",
             "offline_token": company.openepcis_offline_token,
@@ -132,7 +142,6 @@ class OpenepcisClient(models.AbstractModel):
         return bool(
             company.openepcis_enabled
             and company.openepcis_base_url
-            and company.openepcis_oidc_issuer
             and company.openepcis_client_id
             and company.openepcis_offline_token
         )
@@ -145,6 +154,62 @@ class OpenepcisClient(models.AbstractModel):
     # ------------------------------------------------------------------
     # Tokens
     # ------------------------------------------------------------------
+
+    @api.model
+    def _discover_issuer(self, base_url):
+        """The authorization server (Keycloak realm) the resolver trusts.
+
+        RFC 9728 (OAuth 2.0 Protected Resource Metadata): the resolver publishes
+        ``/.well-known/oauth-protected-resource`` naming its
+        ``authorization_servers``. Reading it means an administrator configures
+        ONE URL — the resolver's — and the realm is discovered, instead of
+        pasting a realm URL that has to match what the resolver actually accepts
+        (the class of mistake _token_error spends most of its lines untangling).
+
+        Cached per resolver per worker, like the OIDC discovery document.
+        ``openepcis_oidc_issuer`` remains an override for a deployment that does
+        not publish the metadata.
+        """
+        if base_url in _PROTECTED_RESOURCE:
+            return _PROTECTED_RESOURCE[base_url]
+
+        url = "%s/.well-known/oauth-protected-resource" % base_url
+        try:
+            response = requests.get(url, timeout=TOKEN_TIMEOUT)
+        except requests.exceptions.RequestException as exc:
+            raise OpenepcisError(
+                _("Could not reach the resolver at %(url)s: %(why)s", url=url, why=exc)
+            ) from exc
+        if response.status_code >= 300:
+            raise OpenepcisError(
+                _(
+                    "The resolver at %(base)s does not publish OAuth metadata "
+                    "(%(url)s answered %(status)s). Set the Keycloak realm URL "
+                    "manually under Settings > OpenEPCIS.",
+                    base=base_url,
+                    url=url,
+                    status=response.status_code,
+                ),
+                status=response.status_code,
+            )
+        try:
+            servers = (response.json() or {}).get("authorization_servers") or []
+        except ValueError as exc:
+            raise OpenepcisError(
+                _("The resolver at %s returned no OAuth metadata document.", url)
+            ) from exc
+        if not servers:
+            raise OpenepcisError(
+                _(
+                    "The resolver at %s names no authorization server in its "
+                    "OAuth metadata.",
+                    url,
+                )
+            )
+
+        issuer = servers[0].rstrip("/")
+        _PROTECTED_RESOURCE[base_url] = issuer
+        return issuer
 
     @api.model
     def _oidc_config(self, issuer):
