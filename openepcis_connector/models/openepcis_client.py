@@ -201,8 +201,7 @@ class OpenepcisClient(models.AbstractModel):
         if not servers:
             raise OpenepcisError(
                 _(
-                    "The resolver at %s names no authorization server in its "
-                    "OAuth metadata.",
+                    "The resolver at %s names no authorization server in its OAuth metadata.",
                     url,
                 )
             )
