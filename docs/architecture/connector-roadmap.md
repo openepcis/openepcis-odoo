@@ -249,16 +249,20 @@ class ClientConfig:
     base_url: str
     request_timeout: tuple[int, int] = (5, 30)
 
-class AuthStrategy(Protocol):
-    def bearer(self) -> str: ...              # a valid access token
 
-class TokenStore(Protocol):                   # host persists rotated tokens
+class AuthStrategy(Protocol):
+    def bearer(self) -> str: ...  # a valid access token
+
+
+class TokenStore(Protocol):  # host persists rotated tokens
     def get_offline_token(self) -> str: ...
     def save_offline_token(self, token: str) -> None: ...
     def save_subject(self, username: str) -> None: ...
 
-class OfflineTokenAuth(AuthStrategy):          # benelog credentials, mode 1
+
+class OfflineTokenAuth(AuthStrategy):  # benelog credentials, mode 1
     def __init__(self, config, token_store, client_id, client_secret=""): ...
+
 
 class Client:
     def __init__(self, config: ClientConfig, auth: AuthStrategy, session=None): ...
@@ -268,20 +272,24 @@ class Client:
     def delete(self, path): ...
     def post_file(self, path, filename, content, form=None): ...
 
+
 # core.gs1 (already written, clean-room)
 def check_digit(digits: str) -> str: ...
 def digital_link(base_url: str, ai_values: dict[str, str]) -> str: ...
+
 
 # masterdata
 class PayloadBuilder:
     def place(self, payload: dict, gs1_path: str, value) -> None: ...
 
+
 def upsert_product(client: Client, gtin: str, record: dict) -> None: ...
 def upsert_organization(client: Client, gln: str, record: dict) -> None: ...
 
+
 # registry
-def draw_key(client: Client, ai: str) -> str: ...        # reserve
-def confirm_key(client: Client, ai: str, key: str) -> None: ...   # commit
+def draw_key(client: Client, ai: str) -> str: ...  # reserve
+def confirm_key(client: Client, ai: str, key: str) -> None: ...  # commit
 def release_key(client: Client, ai: str, key: str) -> None: ...
 ```
 
