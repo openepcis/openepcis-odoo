@@ -24,6 +24,7 @@ from odoo import _, api, fields, models
 from odoo.exceptions import ValidationError
 
 from ..utils.gs1 import language_tag
+from ..vendor.benelog_client.masterdata.payload import place
 
 _logger = logging.getLogger(__name__)
 
@@ -294,28 +295,12 @@ class OpenepcisFieldMapping(models.Model):
         return value
 
     def _place(self, payload, value):
-        """Write ``value`` into ``payload`` at this row's GS1 path."""
-        self.ensure_one()
-        parts = [p.strip() for p in self.gs1_path.split(".")]
-        node = payload
-        for part in parts[:-1]:
-            node = self._descend(node, part)
-        last = parts[-1]
-        if last.endswith("[]"):
-            node.setdefault(last[:-2], [])
-            node[last[:-2]] = [value]
-        else:
-            node[last] = value
+        """Write ``value`` into ``payload`` at this row's GS1 path.
 
-    @api.model
-    def _descend(self, node, part):
-        """One step down the path, creating the container the segment implies."""
-        if part.endswith("[]"):
-            key = part[:-2]
-            existing = node.get(key)
-            if not isinstance(existing, list) or not existing:
-                node[key] = [{}]
-            return node[key][0]
-        if not isinstance(node.get(part), dict):
-            node[part] = {}
-        return node[part]
+        The path grammar (dotted segments, ``[]`` as a single-element list)
+        lives in the client library, so every connector places values the same
+        way. The constraint on ``gs1_path`` keeps the ``ValueError`` for an
+        unusable path from ever being reachable here.
+        """
+        self.ensure_one()
+        place(payload, self.gs1_path, value)
