@@ -22,4 +22,4 @@ tools/vendor_benelog_client.sh [path-or-url] [ref]
 
 The script records the vendored commit below.
 
-Vendored commit: `2bc8f1a`
+Vendored commit: `83b3e4f`
