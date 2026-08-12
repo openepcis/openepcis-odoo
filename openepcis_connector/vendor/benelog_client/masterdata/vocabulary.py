@@ -50,6 +50,11 @@ class Kind:
     required_terms: tuple[str, ...]
     """Terms the catalog refuses the record without."""
 
+    record_type: str
+    """The GS1 Web Vocabulary class of the record (``Product``,
+    ``Organization``). The resolver's schema validation requires it at the
+    document root; the upsert sets it when the caller has not."""
+
 
 @dataclass(frozen=True)
 class Term:
@@ -91,6 +96,7 @@ class _Manifest:
                 endpoint=data["endpoint"],
                 bulk_endpoint=data["bulkEndpoint"],
                 required_terms=tuple(data["requiredTerms"]),
+                record_type=data["recordType"],
             )
             for name, data in raw["kinds"].items()
         }
