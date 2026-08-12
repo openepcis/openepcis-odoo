@@ -7,41 +7,182 @@
       "keyType": "GTIN",
       "endpoint": "/products",
       "bulkEndpoint": "/bulk/products",
-      "requiredTerms": ["productName"]
+      "requiredTerms": [
+        "productName"
+      ],
+      "recordType": "Product"
     },
     "ORGANIZATION": {
       "keyTerm": "globalLocationNumber",
       "keyType": "GLN",
       "endpoint": "/organizations",
       "bulkEndpoint": "/bulk/organizations",
-      "requiredTerms": []
+      "requiredTerms": [],
+      "recordType": "Organization"
     }
   },
   "terms": [
-    {"path": "productName", "kind": "PRODUCT", "shape": "localized", "scope": "both", "bulkColumn": "productName_en"},
-    {"path": "productDescription", "kind": "PRODUCT", "shape": "localized", "scope": "record"},
-    {"path": "gpcCategoryCode", "kind": "PRODUCT", "shape": "text", "scope": "both", "bulkColumn": "gpcCategoryCode"},
-    {"path": "brand.brandName", "kind": "PRODUCT", "shape": "text", "scope": "both", "bulkColumn": "brandName"},
-    {"path": "netContent", "kind": "PRODUCT", "shape": "quantity", "scope": "record"},
-    {"path": "netWeight", "kind": "PRODUCT", "shape": "quantity", "scope": "record"},
-    {"path": "grossVolume", "kind": "PRODUCT", "shape": "quantity", "scope": "record"},
-    {"path": "countryOfOrigin.countryCode", "kind": "PRODUCT", "shape": "text", "scope": "both", "bulkColumn": "countryOfOriginCode"},
-    {"path": "targetMarket[].targetMarketCountries.countryCode", "kind": "PRODUCT", "shape": "text", "scope": "record"},
-    {"path": "hasBatchLotNumber", "kind": "PRODUCT", "shape": "boolean_text", "scope": "bulk", "bulkColumn": "hasBatchLotNumber"},
-    {"path": "hasSerialNumber", "kind": "PRODUCT", "shape": "boolean_text", "scope": "bulk", "bulkColumn": "hasSerialNumber"},
-    {"path": "isAnonymousAccessAllowed", "kind": "PRODUCT", "shape": "boolean_text", "scope": "bulk", "bulkColumn": "isAnonymousAccessAllowed"},
-    {"path": "organizationName", "kind": "ORGANIZATION", "shape": "localized", "scope": "both", "bulkColumn": "organizationName_en"},
-    {"path": "address.streetAddress", "kind": "ORGANIZATION", "shape": "text", "scope": "record"},
-    {"path": "address.streetAddressLine2", "kind": "ORGANIZATION", "shape": "text", "scope": "record"},
-    {"path": "address.addressLocality", "kind": "ORGANIZATION", "shape": "text", "scope": "record"},
-    {"path": "address.postalCode", "kind": "ORGANIZATION", "shape": "text", "scope": "record"},
-    {"path": "address.addressRegion", "kind": "ORGANIZATION", "shape": "text", "scope": "record"},
-    {"path": "address.addressCountry.countryCode", "kind": "ORGANIZATION", "shape": "text", "scope": "record"},
-    {"path": "contactPoint[].email", "kind": "ORGANIZATION", "shape": "text", "scope": "record"},
-    {"path": "contactPoint[].telephone", "kind": "ORGANIZATION", "shape": "text", "scope": "record"},
-    {"path": "glnType", "kind": "ORGANIZATION", "shape": "text", "scope": "bulk", "bulkColumn": "glnType"},
-    {"path": "organizationRole", "kind": "ORGANIZATION", "shape": "text", "scope": "bulk", "bulkColumn": "organizationRole"},
-    {"path": "partyGLN", "kind": "ORGANIZATION", "shape": "text", "scope": "bulk", "bulkColumn": "partyGLN"},
-    {"path": "department", "kind": "ORGANIZATION", "shape": "localized", "scope": "bulk", "bulkColumn": "department_en"}
+    {
+      "path": "productName",
+      "kind": "PRODUCT",
+      "shape": "localized",
+      "scope": "both",
+      "bulkColumn": "productName_en"
+    },
+    {
+      "path": "productDescription",
+      "kind": "PRODUCT",
+      "shape": "localized",
+      "scope": "record"
+    },
+    {
+      "path": "gpcCategoryCode",
+      "kind": "PRODUCT",
+      "shape": "text",
+      "scope": "both",
+      "bulkColumn": "gpcCategoryCode"
+    },
+    {
+      "path": "brand.brandName",
+      "kind": "PRODUCT",
+      "shape": "text",
+      "scope": "both",
+      "bulkColumn": "brandName"
+    },
+    {
+      "path": "netContent",
+      "kind": "PRODUCT",
+      "shape": "quantity",
+      "scope": "record"
+    },
+    {
+      "path": "netWeight",
+      "kind": "PRODUCT",
+      "shape": "quantity",
+      "scope": "record"
+    },
+    {
+      "path": "grossVolume",
+      "kind": "PRODUCT",
+      "shape": "quantity",
+      "scope": "record"
+    },
+    {
+      "path": "countryOfOrigin.countryCode",
+      "kind": "PRODUCT",
+      "shape": "text",
+      "scope": "both",
+      "bulkColumn": "countryOfOriginCode"
+    },
+    {
+      "path": "targetMarket[].targetMarketCountries.countryCode",
+      "kind": "PRODUCT",
+      "shape": "text",
+      "scope": "record"
+    },
+    {
+      "path": "hasBatchLotNumber",
+      "kind": "PRODUCT",
+      "shape": "boolean_text",
+      "scope": "bulk",
+      "bulkColumn": "hasBatchLotNumber"
+    },
+    {
+      "path": "hasSerialNumber",
+      "kind": "PRODUCT",
+      "shape": "boolean_text",
+      "scope": "bulk",
+      "bulkColumn": "hasSerialNumber"
+    },
+    {
+      "path": "isAnonymousAccessAllowed",
+      "kind": "PRODUCT",
+      "shape": "boolean_text",
+      "scope": "bulk",
+      "bulkColumn": "isAnonymousAccessAllowed"
+    },
+    {
+      "path": "organizationName",
+      "kind": "ORGANIZATION",
+      "shape": "localized",
+      "scope": "both",
+      "bulkColumn": "organizationName_en"
+    },
+    {
+      "path": "address.streetAddress",
+      "kind": "ORGANIZATION",
+      "shape": "text",
+      "scope": "record"
+    },
+    {
+      "path": "address.streetAddressLine2",
+      "kind": "ORGANIZATION",
+      "shape": "text",
+      "scope": "record"
+    },
+    {
+      "path": "address.addressLocality",
+      "kind": "ORGANIZATION",
+      "shape": "text",
+      "scope": "record"
+    },
+    {
+      "path": "address.postalCode",
+      "kind": "ORGANIZATION",
+      "shape": "text",
+      "scope": "record"
+    },
+    {
+      "path": "address.addressRegion",
+      "kind": "ORGANIZATION",
+      "shape": "text",
+      "scope": "record"
+    },
+    {
+      "path": "address.addressCountry.countryCode",
+      "kind": "ORGANIZATION",
+      "shape": "text",
+      "scope": "record"
+    },
+    {
+      "path": "contactPoint[].email",
+      "kind": "ORGANIZATION",
+      "shape": "text",
+      "scope": "record"
+    },
+    {
+      "path": "contactPoint[].telephone",
+      "kind": "ORGANIZATION",
+      "shape": "text",
+      "scope": "record"
+    },
+    {
+      "path": "glnType",
+      "kind": "ORGANIZATION",
+      "shape": "text",
+      "scope": "bulk",
+      "bulkColumn": "glnType"
+    },
+    {
+      "path": "organizationRole",
+      "kind": "ORGANIZATION",
+      "shape": "text",
+      "scope": "bulk",
+      "bulkColumn": "organizationRole"
+    },
+    {
+      "path": "partyGLN",
+      "kind": "ORGANIZATION",
+      "shape": "text",
+      "scope": "bulk",
+      "bulkColumn": "partyGLN"
+    },
+    {
+      "path": "department",
+      "kind": "ORGANIZATION",
+      "shape": "localized",
+      "scope": "bulk",
+      "bulkColumn": "department_en"
+    }
   ]
 }

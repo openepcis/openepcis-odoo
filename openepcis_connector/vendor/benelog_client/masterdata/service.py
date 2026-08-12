@@ -116,6 +116,10 @@ class Masterdata:
             raise InvalidKey(key, problem)
         payload = dict(document)
         payload[kind.key_term] = cleaned
+        # The resolver's schema validation requires the GS1 class at the root
+        # ("required property 'type' not found" otherwise). Callers stating
+        # their own — e.g. ["Product", "TextileApparel"] — are left alone.
+        payload.setdefault("type", kind.record_type)
         return self._client.put(f"{kind.endpoint}/{cleaned}", payload)
 
     # -- Bulk onboarding -----------------------------------------------------
