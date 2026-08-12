@@ -38,7 +38,7 @@ class OpenepcisCase(TransactionCase):
                 "openepcis_enabled": True,
                 "openepcis_base_url": "https://id.example.test",
                 "openepcis_oidc_issuer": "https://auth.example.test/realms/openepcis",
-                "openepcis_client_id": "odoo-connector",
+                "openepcis_client_id": "integration-connector",
                 "openepcis_offline_token": "offline.token.value",
             }
         )

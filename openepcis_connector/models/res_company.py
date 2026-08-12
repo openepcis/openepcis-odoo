@@ -39,7 +39,7 @@ class ResCompany(models.Model):
     )
     openepcis_client_id = fields.Char(
         string="Client ID",
-        default="odoo-connector",
+        default="integration-connector",
         help="The Keycloak client this connector authenticates as.",
     )
     # Restricted to administrators: an ordinary user publishes records without
