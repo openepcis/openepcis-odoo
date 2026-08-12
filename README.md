@@ -110,9 +110,12 @@ That split is deliberate. Minting a token here would need Keycloak's
 whole realm, and would route a user's password through the ERP. Issuing belongs
 where a human is present in a browser and can consent.
 
-The realm URL is the realm itself — `https://auth.example.org/realms/openepcis` —
-and the connector discovers the endpoints from there, so nothing else needs
-configuring.
+You configure **one URL** — the resolver's. The connector reads the resolver's
+OAuth 2.0 Protected Resource Metadata (RFC 9728,
+`/.well-known/oauth-protected-resource`) to find which Keycloak realm issues its
+tokens, then discovers that realm's endpoints from there. The *Keycloak realm
+URL* field stays as an optional override, for a resolver that does not publish
+the metadata.
 
 The addon checks what it can when you paste a token: an ordinary refresh token is
 refused on the spot, because it would work for a few minutes and then stop, long

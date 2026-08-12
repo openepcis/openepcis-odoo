@@ -117,7 +117,8 @@ revoked and asks for a fresh token, which is correct.
 Against the realm above, with the connector's own code and no stubs:
 
 - an offline token is minted, `typ: Offline`, `refresh_expires_in: 0`
-- the connector discovers the token endpoint from the realm URL
+- the connector discovers the realm from the resolver's RFC 9728 metadata
+  (`/.well-known/oauth-protected-resource`), then its token endpoint from the realm
 - it exchanges the offline token for a 120-second access token carrying all three
   required claims
 - the access token is cached and re-minted on demand

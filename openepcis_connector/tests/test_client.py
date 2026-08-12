@@ -140,8 +140,10 @@ class TestTokens(OpenepcisCase):
         super().setUp()
         client_module._ACCESS_TOKENS.clear()
         client_module._OIDC_CONFIG.clear()
+        client_module._PROTECTED_RESOURCE.clear()
         self.addCleanup(client_module._ACCESS_TOKENS.clear)
         self.addCleanup(client_module._OIDC_CONFIG.clear)
+        self.addCleanup(client_module._PROTECTED_RESOURCE.clear)
         # Discovery pre-seeded: this suite is about the token exchange, not
         # about reading a well-known document.
         client_module._OIDC_CONFIG["https://auth.example.test/realms/openepcis"] = DISCOVERY
@@ -412,3 +414,93 @@ class TestDiagnosis(OpenepcisCase):
         checks = self._diagnose({"/gs1de/keys": OpenepcisError("no client", status=400)})
         prefix_check = next(c for c in checks if "prefix" in c[0])
         self.assertIn("only needed", prefix_check[2])
+
+
+@tagged("post_install", "-at_install")
+class TestDiscovery(OpenepcisCase):
+    """The realm is discovered from the resolver (RFC 9728), not pasted in.
+
+    An administrator configures one URL — the resolver's — and the authorization
+    server is read from its protected-resource metadata. A configured realm URL
+    stays as an override for a resolver that publishes none.
+    """
+
+    def setUp(self):
+        super().setUp()
+        client_module._PROTECTED_RESOURCE.clear()
+        client_module._OIDC_CONFIG.clear()
+        self.addCleanup(client_module._PROTECTED_RESOURCE.clear)
+        self.addCleanup(client_module._OIDC_CONFIG.clear)
+
+    def _metadata(self, answer):
+        seen = {}
+
+        def fake(url, **kw):
+            seen["url"] = url
+            return answer
+
+        patch("%s.requests.get" % MODULE, fake).start()
+        self.addCleanup(patch.stopall)
+        return seen
+
+    def test_the_realm_is_discovered_from_the_resolver(self):
+        # No realm configured: it must be read from the resolver's metadata.
+        self.company.openepcis_oidc_issuer = False
+        seen = self._metadata(
+            _json(
+                {
+                    "resource": "https://id.example.test",
+                    "authorization_servers": ["https://auth.example.test/realms/openepcis"],
+                }
+            )
+        )
+        settings = self.env["openepcis.client"]._settings(company=self.company)
+        self.assertEqual(settings["issuer"], "https://auth.example.test/realms/openepcis")
+        self.assertEqual(
+            seen["url"], "https://id.example.test/.well-known/oauth-protected-resource"
+        )
+
+    def test_a_configured_realm_overrides_discovery(self):
+        # With a realm URL set, discovery is not consulted at all.
+        called = {"n": 0}
+
+        def fake(url, **kw):
+            called["n"] += 1
+            return _json({})
+
+        patch("%s.requests.get" % MODULE, fake).start()
+        self.addCleanup(patch.stopall)
+        settings = self.env["openepcis.client"]._settings(company=self.company)
+        self.assertEqual(settings["issuer"], "https://auth.example.test/realms/openepcis")
+        self.assertEqual(called["n"], 0, "a configured realm must not trigger discovery")
+
+    def test_a_resolver_without_metadata_is_explained(self):
+        self.company.openepcis_oidc_issuer = False
+        self._metadata(_Answer(404, b"not found", "text/plain"))
+        with self.assertRaises(OpenepcisError) as caught:
+            self.env["openepcis.client"]._settings(company=self.company)
+        message = str(caught.exception)
+        self.assertIn("does not publish OAuth metadata", message)
+        self.assertIn("manually", message)
+
+    def test_metadata_without_an_authorization_server_is_explained(self):
+        self.company.openepcis_oidc_issuer = False
+        self._metadata(_json({"resource": "https://id.example.test"}))
+        with self.assertRaises(OpenepcisError) as caught:
+            self.env["openepcis.client"]._settings(company=self.company)
+        self.assertIn("no authorization server", str(caught.exception))
+
+    def test_discovery_is_cached_per_resolver(self):
+        self.company.openepcis_oidc_issuer = False
+        called = {"n": 0}
+
+        def fake(url, **kw):
+            called["n"] += 1
+            return _json({"authorization_servers": ["https://auth.example.test/realms/openepcis"]})
+
+        patch("%s.requests.get" % MODULE, fake).start()
+        self.addCleanup(patch.stopall)
+        client = self.env["openepcis.client"]
+        client._settings(company=self.company)
+        client._settings(company=self.company)
+        self.assertEqual(called["n"], 1, "the metadata is read once per resolver, then cached")
