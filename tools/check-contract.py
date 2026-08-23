@@ -12,18 +12,25 @@ when a resolver release lands, or before publishing a new version of the addon:
 
     python tools/check-contract.py https://id.dev.epcis.cloud
 
+The contract file defaults to this repo's ``doc/api-contract.json`` but can be
+overridden, so other connectors can reuse the script against their own endpoint
+subset without forking it:
+
+    python tools/check-contract.py --contract path/to/api-contract.json https://…
+
 Exit status is 0 when every endpoint the connector uses is still there, 1 when
 something has moved. A difference means the connector needs attention — do not
 "fix" it by editing the contract.
 """
 
+import argparse
 import json
 import pathlib
 import sys
 import urllib.error
 import urllib.request
 
-CONTRACT = pathlib.Path(__file__).resolve().parent.parent / "doc" / "api-contract.json"
+DEFAULT_CONTRACT = pathlib.Path(__file__).resolve().parent.parent / "doc" / "api-contract.json"
 TIMEOUT = 30
 
 
@@ -37,11 +44,24 @@ def fetch(base_url):
 
 
 def main(argv):
-    if len(argv) != 2:
-        sys.exit("usage: check-contract.py <resolver-base-url>")
+    parser = argparse.ArgumentParser(
+        prog="check-contract.py",
+        description="Compare an api-contract.json against a running resolver.",
+    )
+    parser.add_argument("base_url", help="resolver base URL, e.g. https://id.dev.epcis.cloud")
+    parser.add_argument(
+        "--contract",
+        type=pathlib.Path,
+        default=DEFAULT_CONTRACT,
+        help="contract file to check (default: %(default)s)",
+    )
+    args = parser.parse_args(argv[1:])
 
-    contract = json.loads(CONTRACT.read_text())
-    live = fetch(argv[1]).get("paths", {})
+    if not args.contract.is_file():
+        sys.exit("Contract file not found: %s" % args.contract)
+
+    contract = json.loads(args.contract.read_text())
+    live = fetch(args.base_url).get("paths", {})
 
     problems = []
     checked = 0
