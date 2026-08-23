@@ -1,0 +1,17 @@
+# Part of the OpenEPCIS connector for Odoo. See LICENSE (LGPL-3).
+#
+# Demo image for the demo-odoo Terraform module (openepcis-platform):
+# stock Odoo 18 with the openepcis_connector addon preinstalled.
+#
+# Build from the repo root (the build context must be the repo root so the
+# addon directory is inside it):
+#
+#   podman build -f docker/demo/Containerfile \
+#     -t registry.company-group.com/openepcis/odoo-demo:18 .
+#
+# See docker/demo/README.md for multi-arch builds and pushing.
+
+FROM odoo:18
+
+# /mnt/extra-addons is already on the addons_path of the official image.
+COPY --chown=odoo:odoo openepcis_connector /mnt/extra-addons/openepcis_connector
