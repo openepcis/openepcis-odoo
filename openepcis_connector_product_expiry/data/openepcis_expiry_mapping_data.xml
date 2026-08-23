@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+  <!--
+    The dates product_expiry keeps on a lot, as GS1 terms. noupdate="1" like
+    every shipped mapping: starting points, not settings this module owns.
+
+    Odoo and GS1 agree on the semantics here almost word for word:
+    expiration_date is "products may become dangerous" (GS1: expirationDate),
+    use_date is labelled Best before in Odoo itself (GS1: bestBeforeDate).
+    removal_date is shipped inactive: Odoo means "remove from stock for FEFO",
+    GS1's sellByDate means "last day at retail" — close, but equating them is a
+    judgement the administrator should make, not this module.
+  -->
+  <data noupdate="1">
+
+    <record id="mapping_lot_expiration_date" model="openepcis.field.mapping">
+      <field name="model_name">stock.lot</field>
+      <field name="odoo_field">expiration_date</field>
+      <field name="gs1_path">expirationDate</field>
+      <field name="value_type">date</field>
+      <field name="sequence">40</field>
+      <field name="note">The date from which the goods may be dangerous — Odoo's and GS1's definitions coincide.</field>
+    </record>
+
+    <record id="mapping_lot_best_before_date" model="openepcis.field.mapping">
+      <field name="model_name">stock.lot</field>
+      <field name="odoo_field">use_date</field>
+      <field name="gs1_path">bestBeforeDate</field>
+      <field name="value_type">date</field>
+      <field name="sequence">50</field>
+      <field name="note">Odoo labels this field "Best before Date"; GS1 calls the same thing bestBeforeDate.</field>
+    </record>
+
+    <record id="mapping_lot_sell_by_date" model="openepcis.field.mapping">
+      <field name="model_name">stock.lot</field>
+      <field name="odoo_field">removal_date</field>
+      <field name="gs1_path">sellByDate</field>
+      <field name="value_type">date</field>
+      <field name="sequence">60</field>
+      <field name="active" eval="False"/>
+      <field name="note">Inactive on purpose: Odoo's removal date drives FEFO picking, GS1's sellByDate is the last day at retail. Activate it if they mean the same thing in your business.</field>
+    </record>
+
+  </data>
+</odoo>
