@@ -96,6 +96,20 @@ class OpenepcisSyncMixin(models.AbstractModel):
         """Name of the key inside the catalog document, e.g. ``gtin``."""
         raise NotImplementedError
 
+    def _openepcis_qualifiers(self):
+        """Digital Link qualifiers refining the key: ``{"10": lot}``, ``{"21": serial}``.
+
+        A GS1 key names a class of thing; a qualifier narrows it to a batch or
+        a single unit, and the catalog stores a distinct document at each
+        level. Every model in this addon is identified by its bare key and
+        returns the default; the stock bridge overrides this for lots and
+        serial numbers.
+
+        Insertion order is path order, and GS1 prescribes lot (10) before
+        serial (21) — an implementation returning both must list them so.
+        """
+        return {}
+
     def _openepcis_company(self):
         """Whose credentials publish this record.
 
@@ -110,15 +124,34 @@ class OpenepcisSyncMixin(models.AbstractModel):
     # Digital Link
     # ------------------------------------------------------------------
 
+    def _openepcis_qualifier_suffix(self):
+        """``/{ai}/{value}`` per qualifier, RFC-3986-encoded — or an empty string.
+
+        Shared by the publish path and the Digital Link, so a record can never
+        be published under one URI and displayed under another. The values are
+        percent-encoded because lot numbers contain whatever people put in lot
+        numbers — slashes and spaces included — and a raw slash would silently
+        change the path the resolver sees. The AI itself is a GS1 constant and
+        needs no encoding.
+        """
+        self.ensure_one()
+        return "".join(
+            "/%s/%s" % (ai, quote(str(value), safe=""))
+            for ai, value in self._openepcis_qualifiers().items()
+        )
+
     @api.depends("openepcis_state")
     def _compute_openepcis_digital_link(self):
         base = self.env["openepcis.client"].base_url(company=self.env.company)
         for record in self:
             key = record._openepcis_key()
-            record.openepcis_digital_link = (
+            link = (
                 gs1.digital_link(base, record._openepcis_anchor_ai(), key)
                 if base and key and record.openepcis_state == "synced"
-                else False
+                else ""
+            )
+            record.openepcis_digital_link = (
+                link + record._openepcis_qualifier_suffix() if link else False
             )
 
     @api.depends("openepcis_digital_link")
@@ -330,7 +363,11 @@ class OpenepcisSyncMixin(models.AbstractModel):
             return blocker
 
         key = gs1.clean(self._openepcis_key())
-        path = "%s/%s" % (self._openepcis_endpoint(), key)
+        path = "%s/%s%s" % (
+            self._openepcis_endpoint(),
+            key,
+            self._openepcis_qualifier_suffix(),
+        )
         self.env["openepcis.client"].put(
             path, self._openepcis_payload(), company=self._openepcis_company()
         )
