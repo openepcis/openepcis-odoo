@@ -161,6 +161,39 @@
         ]
       }
     },
+    "/products/{gtin}/10/{lot}": {
+      "put": {
+        "responses": [
+          "200",
+          "201",
+          "400",
+          "401",
+          "500"
+        ]
+      }
+    },
+    "/products/{gtin}/10/{lot}/21/{serial}": {
+      "put": {
+        "responses": [
+          "200",
+          "201",
+          "400",
+          "401",
+          "500"
+        ]
+      }
+    },
+    "/products/{gtin}/21/{serial}": {
+      "put": {
+        "responses": [
+          "200",
+          "201",
+          "400",
+          "401",
+          "500"
+        ]
+      }
+    },
     "/sync/channels": {
       "get": {
         "responses": [
