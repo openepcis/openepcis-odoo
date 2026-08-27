@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+  <!-- Where an event happened. One GLN on a site, and everything under it
+       inherits — which is why the computed read point is shown beside it. -->
+  <record id="view_location_form_openepcis" model="ir.ui.view">
+    <field name="name">stock.location.form.openepcis</field>
+    <field name="model">stock.location</field>
+    <field name="inherit_id" ref="stock.view_location_form"/>
+    <field name="arch" type="xml">
+      <xpath expr="//group[@name='additional_info']" position="inside">
+        <field name="openepcis_gln" placeholder="4068194000009"/>
+        <field name="openepcis_read_point_gln" invisible="openepcis_gln"/>
+      </xpath>
+    </field>
+  </record>
+
+  <!-- What an operation means, in the vocabulary a trading partner reads. -->
+  <record id="view_picking_type_form_openepcis" model="ir.ui.view">
+    <field name="name">stock.picking.type.form.openepcis</field>
+    <field name="model">stock.picking.type</field>
+    <field name="inherit_id" ref="stock.view_picking_type_form"/>
+    <field name="arch" type="xml">
+      <xpath expr="//page[@name='general']/group[@name='second']" position="inside">
+        <group string="EPCIS" name="openepcis">
+          <field name="openepcis_capture"/>
+          <field name="openepcis_biz_step" invisible="not openepcis_capture"/>
+          <field name="openepcis_disposition" invisible="not openepcis_capture"/>
+        </group>
+      </xpath>
+    </field>
+  </record>
+
+  <record id="view_quant_package_form_openepcis" model="ir.ui.view">
+    <field name="name">stock.quant.package.form.openepcis</field>
+    <field name="model">stock.quant.package</field>
+    <field name="inherit_id" ref="stock.view_quant_package_form"/>
+    <field name="arch" type="xml">
+      <field name="name" position="after">
+        <field name="openepcis_sscc"/>
+        <button name="action_openepcis_mint_sscc" type="object" class="btn-link"
+                string="Mint an SSCC" invisible="openepcis_sscc"/>
+      </field>
+    </field>
+  </record>
+
+  <record id="view_picking_form_openepcis" model="ir.ui.view">
+    <field name="name">stock.picking.form.openepcis</field>
+    <field name="model">stock.picking</field>
+    <field name="inherit_id" ref="stock.view_picking_form"/>
+    <field name="arch" type="xml">
+      <xpath expr="//div[@name='button_box']" position="inside">
+        <button name="%(action_openepcis_event)d" type="action" icon="fa-share-alt"
+                class="oe_stat_button" invisible="openepcis_event_count == 0"
+                context="{'search_default_name': name}">
+          <field name="openepcis_event_count" widget="statinfo" string="EPCIS"/>
+        </button>
+      </xpath>
+    </field>
+  </record>
+
+</odoo>

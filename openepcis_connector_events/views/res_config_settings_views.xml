@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+  <record id="res_config_settings_view_form_events" model="ir.ui.view">
+    <field name="name">res.config.settings.form.inherit.openepcis.events</field>
+    <field name="model">res.config.settings</field>
+    <field name="inherit_id" ref="openepcis_connector.res_config_settings_view_form"/>
+    <field name="arch" type="xml">
+
+      <xpath expr="//app[@name='openepcis_connector']" position="inside">
+
+        <block title="Visibility events" name="openepcis_events">
+          <setting string="Report visibility events"
+                   help="Turn validated transfers into EPCIS events: a receipt, a transfer, a pack, a delivery. Master data says what a product is; these say what became of one of them.">
+            <field name="openepcis_events_enabled"/>
+
+            <div class="content-group mt16" invisible="not openepcis_events_enabled">
+              <div class="row mt8">
+                <label for="openepcis_epcis_url" class="col-lg-4 o_light_label"/>
+                <field name="openepcis_epcis_url"
+                       placeholder="https://api.epcis.cloud"
+                       required="openepcis_events_enabled"/>
+              </div>
+
+              <div class="text-muted mt8">
+                The EPCIS repository is a different service from the resolver, and
+                usually a different host. The credential is the same offline token —
+                but capture is a separate permission, and a token that publishes
+                master data can still be refused here.
+              </div>
+
+              <div class="mt8">
+                <button name="action_openepcis_test_capture" type="object"
+                        string="Test capture" class="btn-link" icon="fa-plug"/>
+              </div>
+
+              <div class="row mt16">
+                <label for="openepcis_gcp" class="col-lg-4 o_light_label"/>
+                <field name="openepcis_gcp" placeholder="4068194"/>
+              </div>
+
+              <div class="text-muted mt8">
+                Only for logistic units. An SSCC is the one GS1 key a company issues
+                by itself — no registry is involved — and a pallet needs one before
+                it can say what is underneath it.
+              </div>
+            </div>
+          </setting>
+        </block>
+
+      </xpath>
+    </field>
+  </record>
+
+</odoo>
