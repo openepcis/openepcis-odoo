@@ -16,9 +16,12 @@ jobs:
       - uses: actions/checkout@v5
       - uses: astral-sh/ruff-action@v3
         with:
-          # Read from required-version in pyproject.toml. Never "latest": a new
-          # ruff release must not be able to turn this red on its own.
-          version-file: pyproject.toml
+          # Must match required-version in pyproject.toml. The action cannot
+          # read [tool.ruff].required-version (its version-file input expects a
+          # dependency pin), and "latest" broke the moment 0.16.4 came out. The
+          # duplication is guarded: ruff itself refuses to run when the two
+          # values diverge, so they cannot drift apart silently.
+          version: "0.16.2"
           args: check --output-format=github
 
   format:
@@ -27,7 +30,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: astral-sh/ruff-action@v3
         with:
-          version-file: pyproject.toml
+          version: "0.16.2"  # guarded against pyproject.toml by ruff itself
           args: format --check --diff
 
   gs1-helpers:
@@ -84,11 +87,11 @@ jobs:
       - name: Install and run the test suite
         run: |
           odoo -d ci \
-            -i openepcis_connector \
+            -i openepcis_connector,openepcis_connector_stock,openepcis_connector_product_expiry \
             --addons-path=/usr/lib/python3/dist-packages/odoo/addons,${GITHUB_WORKSPACE}/addons/openepcis-odoo \
             --db_host=db --db_user=odoo --db_password=odoo \
             --data-dir=/tmp/odoo-data \
-            --test-enable --test-tags /openepcis_connector \
+            --test-enable --test-tags /openepcis_connector,/openepcis_connector_stock,/openepcis_connector_product_expiry \
             --stop-after-init --log-level=test 2>&1 | tee odoo.log
 
       - name: Fail on any failed test
