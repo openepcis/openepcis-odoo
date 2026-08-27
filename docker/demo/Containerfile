@@ -9,15 +9,18 @@
 # carry auto_install, so Odoo decides for itself whether they apply — an image
 # without stock installed never activates the stock bridge.
 #
+# The base image is fully qualified: podman on a host without
+# unqualified-search registries refuses a short name outright.
+#
 # Build from the repo root (the context must be the root so the addon
 # directories are inside it):
 #
 #   podman build --platform linux/amd64 -f docker/demo/Containerfile \
-#     -t registry.company-group.com/openepcis/openepcis-platform/odoo-demo:18 .
+#     -t registry.company-group.com/openepcis/openepcis-connectors/odoo-demo:18 .
 #
 # See docker/demo/README.md for the registry path, multi-arch and pushing.
 
-FROM odoo:18
+FROM docker.io/library/odoo:18
 
 # /mnt/extra-addons is already on the addons_path of the official image.
 COPY --chown=odoo:odoo openepcis_connector /mnt/extra-addons/openepcis_connector

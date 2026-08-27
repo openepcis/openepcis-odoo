@@ -18,14 +18,15 @@ so Odoo activates them by itself once `stock` and `product_expiry` are there.
 ## Where it lives
 
 ```
-registry.company-group.com/openepcis/openepcis-platform/odoo-demo:18
+registry.company-group.com/openepcis/openepcis-connectors/odoo-demo:18
 ```
 
-Under the platform project rather than a project of its own, because that is
-where the thing it serves lives: the module that deploys it, the hostname it
-answers on and the connector it talks to are all defined there. The dev cluster
-already pulls that registry with the `docker-registry-credentials` secret, so no
-new credential is involved.
+Under the openepcis-connectors project, beside the UnoPim demo image, although
+it is built from neither. A GitLab deploy token reaches exactly one project, and
+the dev cluster already holds one for that project in its
+`docker-registry-credentials` secret. Giving the demo images of the connector
+suite one registry path is a smaller thing to explain than a second credential
+in the namespace.
 
 ## Build
 
@@ -39,7 +40,7 @@ from the wrong architecture. Pass `--platform` and check with
 
 ```bash
 podman build --platform linux/amd64 -f docker/demo/Containerfile \
-  -t registry.company-group.com/openepcis/openepcis-platform/odoo-demo:18 .
+  -t registry.company-group.com/openepcis/openepcis-connectors/odoo-demo:18 .
 ```
 
 No emulation is needed for a cross-architecture build here: the image only
@@ -49,7 +50,7 @@ copies files, so nothing from the foreign base image is ever executed.
 
 ```bash
 podman login registry.company-group.com   # needs write_registry
-podman push registry.company-group.com/openepcis/openepcis-platform/odoo-demo:18
+podman push registry.company-group.com/openepcis/openepcis-connectors/odoo-demo:18
 ```
 
 The build is deliberately **manual**. This repository's CI runs on GitHub while
