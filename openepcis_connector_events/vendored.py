@@ -17,6 +17,7 @@ from odoo.addons.openepcis_connector.vendor.benelog_client.core.errors import ( 
 from odoo.addons.openepcis_connector.vendor.benelog_client.events import (  # noqa: F401
     Capture,
     aggregation_event,
+    biz_transaction,
     cbv,
     document,
     event_id,

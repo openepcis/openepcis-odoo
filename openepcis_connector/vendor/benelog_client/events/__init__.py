@@ -11,6 +11,7 @@ and the EPCIS repository. This package is the second half.
 from . import cbv
 from .document import (
     aggregation_event,
+    biz_transaction,
     document,
     event_id,
     instance_uri,
@@ -27,6 +28,7 @@ __all__ = [
     "CaptureOutcome",
     "CaptureReceipt",
     "aggregation_event",
+    "biz_transaction",
     "cbv",
     "document",
     "event_id",

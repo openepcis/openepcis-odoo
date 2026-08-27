@@ -81,6 +81,44 @@ def party(gln: str) -> str:
     return sgln(gln)
 
 
+def biz_transaction(kind: str, reference: str, gln: str | None = None) -> tuple[str, str]:
+    """One entry of a ``bizTransactionList``, with its reference as a URI.
+
+    This is the join between the physical record and the commercial one — the
+    reason a warehouse event can answer "which order was this?" without the
+    asker having an ERP login. It is also a place the schema is strict about in
+    a way that reads as arbitrary: the *type* may be a bare CBV token, but the
+    *reference* must be an RFC 3986 URI. A bare document number goes in raw and
+    the repository refuses the whole event, naming a URI pattern rather than the
+    order number it choked on.
+
+    **Pass a URL if the system has one.** A URN names a document; a URL leads to
+    it. Both satisfy the schema and both are stable identifiers, but only one of
+    them can be followed — by a partner reconciling a delivery, by an auditor
+    years later, by a person who received an event and wants to see the paper
+    behind it. An ERP that publishes its documents should say so here, and the
+    host in that URL also states plainly who issued the document, which the URN
+    form has to encode as a GLN to achieve.
+
+    A reference that is already a URI — ``https://``, ``http://`` or ``urn:`` —
+    is passed through untouched, so the caller decides.
+
+    The fallback, for a system whose documents have no address, is the CBV form
+    ``urn:epcglobal:cbv:bt:<GLN>:<reference>``. The GLN is not decoration:
+    order number 4711 is only unique alongside whoever wrote it.
+    """
+    text = str(reference).strip()
+    if text.startswith(("http://", "https://", "urn:")):
+        return (kind, text)
+    if not gln:
+        raise ValueError(
+            "a business transaction reference has to be a URI. Pass the URL of "
+            f"the document, or the GLN of the party that issued it so a CBV "
+            f"identifier can be built: {reference!r}"
+        )
+    return (kind, f"urn:epcglobal:cbv:bt:{str(gln).strip()}:{_urn_segment(text)}")
+
+
 def quantity_element(
     epc_class: str, quantity: float | None = None, uom: str | None = None
 ) -> dict[str, Any]:
@@ -268,6 +306,18 @@ def _offset(moment: datetime) -> str:
     sign = "+" if total_minutes >= 0 else "-"
     total_minutes = abs(total_minutes)
     return f"{sign}{total_minutes // 60:02d}:{total_minutes % 60:02d}"
+
+
+def _urn_segment(value: str) -> str:
+    """Percent-encode what a URN's namespace-specific string cannot carry raw.
+
+    Document numbers are full of slashes — ``WH/OUT/00007`` is an ordinary Odoo
+    reference — and a slash inside a URN segment is not wrong so much as
+    ambiguous. Encoding keeps one reference one segment, and reverses cleanly.
+    """
+    from urllib.parse import quote
+
+    return quote(str(value), safe="!'()*-._~")
 
 
 def _path_segment(value: str) -> str:

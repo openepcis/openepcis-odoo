@@ -58,7 +58,12 @@ class CaptureOutcome:
     """The repository's verdict on a job.
 
     :param running: still being validated. Neither stored nor refused yet.
-    :param success: stored. Only meaningful once ``running`` is false.
+    :param success: stored. Only meaningful once ``running`` is false and
+        ``known`` is true.
+    :param known: whether the repository could say anything at all. A job it
+        does not recognise is *not* a success: rejected documents and forgotten
+        ones answer alike, and reading that as "stored" turns a refusal into a
+        delivery. The honest answer is that nobody knows.
     :param errors: what was wrong, in the repository's own words. Never
         paraphrased here — a validation message names a field, and rewriting it
         loses the field.
@@ -66,6 +71,7 @@ class CaptureOutcome:
 
     running: bool
     success: bool
+    known: bool = True
     errors: tuple[str, ...] = field(default=())
 
     @property
@@ -102,10 +108,11 @@ class Capture:
     def outcome(self, receipt: CaptureReceipt | str) -> CaptureOutcome:
         """Ask what became of a job.
 
-        A job the repository no longer knows about is reported as finished and
-        successful: capture jobs are retained for a while and then forgotten,
-        and "forgotten" only ever follows "stored" — a rejected document keeps
-        its job so somebody can read the reason.
+        A job the repository does not recognise comes back as *unknown*, not as
+        a success. It is tempting to read it the other way — jobs are retained
+        and then forgotten, and forgetting usually follows storing — but a
+        refused document answers the same way, and a queue that calls that a
+        delivery is worse than one that admits it cannot tell.
         """
         job = receipt if isinstance(receipt, str) else receipt.job
         if not job:
@@ -114,7 +121,7 @@ class Capture:
             body = self._client.get(f"{CAPTURE_PATH}/{job}")
         except BenelogError as error:
             if error.status == 404:
-                return CaptureOutcome(running=False, success=True)
+                return CaptureOutcome(running=False, success=False, known=False)
             raise
         return _outcome_from(body or {})
 

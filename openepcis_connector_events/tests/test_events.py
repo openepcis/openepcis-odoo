@@ -110,6 +110,25 @@ class TestWhereItHappened(EventCase):
 
 @tagged("post_install", "-at_install")
 class TestPaperwork(EventCase):
+    def test_a_delivery_with_an_address_links_to_the_document_itself(self):
+        self.env["ir.config_parameter"].sudo().set_param(
+            "web.base.url", "https://odoo.example.test"
+        )
+        product = self._published_product(tracking="none")
+        product.product_tmpl_id.is_storable = True
+        self.env["stock.quant"]._update_available_quantity(
+            product, self.warehouse.lot_stock_id, 10
+        )
+        picking = self._transfer(self._outgoing_type(), product)
+
+        import json
+
+        event = json.loads(self._queued().payload)["epcisBody"]["eventList"][0]
+        self.assertEqual(
+            event["bizTransactionList"][0]["bizTransaction"],
+            "https://odoo.example.test/odoo/stock.picking/%d" % picking.id,
+        )
+
     def test_a_delivery_carries_its_despatch_advice_and_the_customer(self):
         partner = self.env["res.partner"].create(
             {"name": "A customer", "openepcis_gln": TEST_PARTNER_GLN}
@@ -127,8 +146,12 @@ class TestPaperwork(EventCase):
 
         event = json.loads(self._queued().payload)["epcisBody"]["eventList"][0]
         self.assertEqual(event["bizStep"], "shipping")
-        self.assertEqual(
-            event["bizTransactionList"], [{"type": "desadv", "bizTransaction": picking.name}]
+        # A URL, not a document number: the schema wants a URI, and of the two
+        # forms that satisfy it only one leads anywhere.
+        self.assertEqual(event["bizTransactionList"][0]["type"], "desadv")
+        self.assertTrue(
+            event["bizTransactionList"][0]["bizTransaction"].startswith("urn:epcglobal:cbv:bt:"),
+            "a test database has no address of its own, so the GLN form is right here",
         )
         self.assertEqual(
             event["destinationList"],
@@ -178,6 +201,18 @@ class TestDelivery(EventCase):
         self.capture.outcome_to_give = Outcome(running=False, success=True)
         self._deliver()
         self.assertEqual(event.state, "captured")
+
+    def test_a_job_the_repository_forgets_never_turns_green(self):
+        # It was accepted — that much is true — but "stored" would be a guess,
+        # and a refusal answers the same way.
+        self._transfer(self._incoming_type(), self._published_product(tracking="none"))
+        event = self._queued()
+        self.capture.outcome_to_give = Outcome(running=False, success=False, known=False)
+        for _attempt in range(6):
+            self._deliver()
+
+        self.assertEqual(event.state, "accepted")
+        self.assertIn("cannot be confirmed", event.error or "")
 
     def test_a_document_refused_afterwards_keeps_the_reason(self):
         self._transfer(self._incoming_type(), self._published_product(tracking="none"))

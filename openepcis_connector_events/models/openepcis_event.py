@@ -35,6 +35,12 @@ logger = logging.getLogger(__name__)
 #: for minutes.
 BATCH = 100
 
+#: How often a row asks after a capture job before it gives up asking. The
+#: answer "I do not know that job" does not improve with repetition, and a
+#: queue that keeps asking turns one unanswerable delivery into a permanent
+#: background load.
+SETTLE_ATTEMPTS = 5
+
 
 def _naive_utc(moment):
     """An EPCIS instant as Odoo stores datetimes: naive, and in UTC.
@@ -187,7 +193,12 @@ class OpenepcisEvent(models.Model):
         for company in self._companies():
             capture = client.with_company(company)._epcis_capture(company)
             rows = self.sudo().search(
-                [("company_id", "=", company.id), ("state", "=", "accepted"), ("job", "!=", False)],
+                [
+                    ("company_id", "=", company.id),
+                    ("state", "=", "accepted"),
+                    ("job", "!=", False),
+                    ("attempts", "<", SETTLE_ATTEMPTS),
+                ],
                 limit=BATCH,
             )
             for row in rows:
@@ -201,6 +212,23 @@ class OpenepcisEvent(models.Model):
             logger.info("OpenEPCIS event %s: job not answerable yet (%s)", self.name, error)
             return
         if not outcome.settled:
+            return
+        if not outcome.known:
+            # The repository cannot say what became of it. That is not a
+            # success: a refused document answers exactly the same way. The row
+            # stays accepted — the document was taken into custody, and that
+            # much is true — and says so rather than turning green on a guess.
+            self.sudo().write(
+                {
+                    "attempts": self.attempts + 1,
+                    "error": _(
+                        "The repository does not recognise this capture job, so whether "
+                        "the event was stored cannot be confirmed. It was accepted."
+                    )
+                    if self.attempts + 1 >= SETTLE_ATTEMPTS
+                    else False,
+                }
+            )
             return
         self.sudo().write(
             {

@@ -36,9 +36,10 @@ class Receipt:
 
 
 class Outcome:
-    def __init__(self, running=False, success=True, errors=()):
+    def __init__(self, running=False, success=True, errors=(), known=True):
         self.running = running
         self.success = success
+        self.known = known
         self.errors = tuple(errors)
 
     @property

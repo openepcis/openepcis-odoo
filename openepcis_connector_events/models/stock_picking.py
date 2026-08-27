@@ -35,6 +35,7 @@ from odoo import _, fields, models
 
 from ..vendored import (
     aggregation_event,
+    biz_transaction,
     cbv,
     document,
     event_id,
@@ -248,19 +249,48 @@ class StockPicking(models.Model):
         return moment.replace(tzinfo=timezone.utc)
 
     def _openepcis_biz_transactions(self):
-        """The paperwork this movement belongs to.
+        """The paperwork this movement belongs to, as something followable.
 
         Incoming goods answer to the order that brought them, outgoing goods to
-        the despatch advice that accompanies them. Both are the join between
-        the physical record and the commercial one — the reason a warehouse
-        event can say which order it belonged to without access to the ERP.
+        the despatch advice that accompanies them. This is the join between the
+        physical record and the commercial one — the reason a warehouse event
+        can say which order it belonged to without the asker having an ERP
+        login.
+
+        A URL, not a document number: the schema demands a URI either way, and
+        of the two forms that satisfy it only one leads anywhere. The host also
+        states who issued the document, which the alternative has to encode as a
+        GLN to achieve. Where this database has no address of its own — the
+        default ``localhost`` — the GLN form is used instead, because a link to
+        somebody's laptop identifies nothing.
         """
         self.ensure_one()
-        if self.picking_type_id.code == "incoming" and self.origin:
-            return [(cbv.PO, self.origin)]
-        if self.picking_type_id.code == "outgoing":
-            return [(cbv.DESADV, self.name)]
+        code = self.picking_type_id.code
+        if code == "incoming":
+            reference = self._openepcis_document_reference(self.origin)
+            return [biz_transaction(cbv.PO, reference, self._openepcis_read_point())]
+        if code == "outgoing":
+            reference = self._openepcis_document_reference(self.name)
+            return [biz_transaction(cbv.DESADV, reference, self._openepcis_read_point())]
         return []
+
+    def _openepcis_document_reference(self, fallback):
+        """This transfer's own address, or its number when it has none.
+
+        The source document is the better answer where there is one — a receipt
+        belongs to a purchase order, not to itself — and `purchase_id` only
+        exists when Purchase is installed, which this addon does not require.
+        """
+        self.ensure_one()
+        record = self
+        for field in ("purchase_id", "sale_id"):
+            if field in self._fields and self[field]:
+                record = self[field]
+                break
+        base = (record.get_base_url() or "").rstrip("/")
+        if not base or "localhost" in base or "127.0.0.1" in base:
+            return fallback or self.name
+        return "%s/odoo/%s/%s" % (base, record._name, record.id)
 
     def _openepcis_source_list(self):
         self.ensure_one()
