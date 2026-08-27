@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+  <record id="view_openepcis_event_list" model="ir.ui.view">
+    <field name="name">openepcis.event.list</field>
+    <field name="model">openepcis.event</field>
+    <field name="arch" type="xml">
+      <list string="EPCIS events" create="false" edit="false"
+            decoration-muted="state == 'captured'"
+            decoration-warning="state == 'accepted'"
+            decoration-danger="state in ('rejected', 'failed')">
+        <field name="event_time"/>
+        <field name="name"/>
+        <field name="biz_step"/>
+        <field name="epc_count" string="IDs"/>
+        <field name="state"/>
+        <field name="error" optional="show"/>
+        <field name="event_uuid" optional="hide"/>
+        <field name="job" optional="hide"/>
+        <field name="company_id" groups="base.group_multi_company" optional="hide"/>
+        <button name="action_retry" type="object" string="Send again" icon="fa-repeat"
+                invisible="state == 'captured'"/>
+      </list>
+    </field>
+  </record>
+
+  <record id="view_openepcis_event_form" model="ir.ui.view">
+    <field name="name">openepcis.event.form</field>
+    <field name="model">openepcis.event</field>
+    <field name="arch" type="xml">
+      <form string="EPCIS event" create="false" edit="false">
+        <header>
+          <button name="action_retry" type="object" string="Send again"
+                  class="oe_highlight" invisible="state == 'captured'"/>
+          <button name="action_open_source" type="object" string="Source document"
+                  invisible="not res_id"/>
+          <field name="state" widget="statusbar"
+                 statusbar_visible="queued,accepted,captured"/>
+        </header>
+        <sheet>
+          <div class="oe_title">
+            <h1><field name="name" readonly="1"/></h1>
+          </div>
+          <group>
+            <group>
+              <field name="event_time"/>
+              <field name="biz_step"/>
+              <field name="epc_count"/>
+            </group>
+            <group>
+              <field name="event_uuid"/>
+              <field name="job"/>
+              <field name="attempts"/>
+              <field name="error" invisible="not error"/>
+              <field name="company_id" groups="base.group_multi_company"/>
+            </group>
+          </group>
+          <notebook>
+            <page string="Document">
+              <field name="payload" widget="ace" options="{'mode': 'json'}"/>
+            </page>
+          </notebook>
+        </sheet>
+      </form>
+    </field>
+  </record>
+
+  <record id="view_openepcis_event_search" model="ir.ui.view">
+    <field name="name">openepcis.event.search</field>
+    <field name="model">openepcis.event</field>
+    <field name="arch" type="xml">
+      <search>
+        <field name="name"/>
+        <field name="event_uuid"/>
+        <field name="biz_step"/>
+        <filter name="pending" string="Not yet captured"
+                domain="[('state', 'in', ('queued', 'accepted', 'failed'))]"/>
+        <filter name="trouble" string="Refused" domain="[('state', 'in', ('rejected', 'failed'))]"/>
+        <separator/>
+        <filter name="today" string="Today"
+                domain="[('event_time', '&gt;=', datetime.datetime.now().strftime('%Y-%m-%d 00:00:00'))]"/>
+        <group expand="0" string="Group by">
+          <filter name="by_step" string="Business step" context="{'group_by': 'biz_step'}"/>
+          <filter name="by_state" string="State" context="{'group_by': 'state'}"/>
+        </group>
+      </search>
+    </field>
+  </record>
+
+  <record id="action_openepcis_event" model="ir.actions.act_window">
+    <field name="name">EPCIS events</field>
+    <field name="res_model">openepcis.event</field>
+    <field name="view_mode">list,form</field>
+    <field name="context">{'search_default_pending': 0}</field>
+    <field name="help" type="html">
+      <p class="o_view_nocontent_smiley_face">Nothing has been reported yet.</p>
+      <p>
+        Validated transfers appear here once the company is switched on under
+        Settings and the operation type is armed.
+      </p>
+    </field>
+  </record>
+
+  <menuitem id="menu_openepcis_event"
+            name="EPCIS events"
+            parent="stock.menu_warehouse_report"
+            action="action_openepcis_event"
+            sequence="90"/>
+
+</odoo>

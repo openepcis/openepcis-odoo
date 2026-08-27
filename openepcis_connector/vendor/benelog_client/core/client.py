@@ -79,9 +79,15 @@ class Client:
         payload: Any = None,
         params: dict[str, Any] | None = None,
         timeout: tuple[float, float] | None = None,
+        raw: bool = False,
     ) -> Any:
         """Call the platform and return the decoded body.
 
+        :param raw: return the ``requests`` response instead of the parsed
+            body. For the handful of endpoints whose answer is in the headers —
+            EPCIS capture replies ``202`` with an empty body and a ``Location``
+            naming the job — where decoding the body would discard the only
+            thing the call returned.
         :returns: the parsed JSON, or ``None`` for an empty body (``204``).
         :raises BenelogError: for every non-2xx answer and every transport
             failure. Callers decide whether that aborts them or gets recorded.
@@ -139,7 +145,7 @@ class Client:
                 continue
 
             if response.status_code < 300:
-                return self._decode(response)
+                return response if raw else self._decode(response)
 
             error = self._error_from(response, path)
             used += 1

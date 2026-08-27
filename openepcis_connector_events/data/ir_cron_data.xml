@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+  <data noupdate="1">
+
+    <!--
+      One job for both halves of delivery: send what is waiting, then ask what
+      became of what was sent. They belong together because the second is only
+      interesting a moment after the first — capture is asynchronous, and a
+      document accepted on this run is usually settled by the next.
+
+      Every minute, not every five: an event is a statement about a moment, and
+      the value of knowing where a pallet is decays faster than the value of
+      knowing what a product is called.
+    -->
+    <record id="cron_capture_events" model="ir.cron">
+      <field name="name">OpenEPCIS: deliver visibility events</field>
+      <field name="model_id" ref="model_openepcis_event"/>
+      <field name="state">code</field>
+      <field name="code">model._cron_capture()</field>
+      <field name="interval_number">1</field>
+      <field name="interval_type">minutes</field>
+      <field name="nextcall" eval="(DateTime.now() + timedelta(minutes=1)).strftime('%Y-%m-%d %H:%M:%S')"/>
+      <field name="active" eval="True"/>
+    </record>
+
+  </data>
+</odoo>
