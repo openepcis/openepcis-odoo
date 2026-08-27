@@ -3,55 +3,57 @@
 
 # Demo image
 
-Odoo 18 with the `openepcis_connector` addon preinstalled. This is the image the
-`demo-odoo` Terraform module in [openepcis-platform] deploys as a standing demo
-system on the dev cluster — the module's `image` variable defaults to the tag
-built here.
+Odoo 18 with the connector addons preinstalled — `openepcis_connector`, plus the
+`_stock` and `_product_expiry` bridges. This is the image the `demo-odoo`
+Terraform module in [openepcis-platform] deploys as a standing demo system on
+the dev cluster; the module's `image` variable defaults to the tag built here,
+and its module list installs the apps.
 
-The image is stock `odoo:18` plus one `COPY`: the addon lands in
-`/mnt/extra-addons/openepcis_connector`, which is already on the official
-image's `addons_path`. Install the "OpenEPCIS Connector" app from Apps after
-creating a database (or pass `-i openepcis_connector` when initialising one).
+The image is stock `odoo:18` plus three `COPY` layers into
+`/mnt/extra-addons`, which is already on the official image's `addons_path`.
+Nothing is installed at build time: which apps a database gets is the
+deployment's decision, not the image's, and the two bridges carry `auto_install`
+so Odoo activates them by itself once `stock` and `product_expiry` are there.
+
+## Where it lives
+
+```
+registry.company-group.com/openepcis/openepcis-platform/odoo-demo:18
+```
+
+Under the platform project rather than a project of its own, because that is
+where the thing it serves lives: the module that deploys it, the hostname it
+answers on and the connector it talks to are all defined there. The dev cluster
+already pulls that registry with the `docker-registry-credentials` secret, so no
+new credential is involved.
 
 ## Build
 
-The build context is the **repo root**, so the addon directory is inside the
-context; the root-level `.containerignore` keeps everything else out of it:
+The build context is the **repo root**, so the addon directories are inside the
+context; `.containerignore` keeps everything else out — including the test
+suites, which have no business in a demo image.
 
-```bash
-podman build -f docker/demo/Containerfile \
-  -t registry.company-group.com/openepcis/odoo-demo:18 .
-```
-
-For a specific target architecture (the dev cluster may run a different one
-than your build machine — check with `kubectl get nodes -L kubernetes.io/arch`),
-pass `--platform`, e.g.:
+The dev cluster runs `amd64`; a build machine may not, and Odoo will not start
+from the wrong architecture. Pass `--platform` and check with
+`kubectl get nodes -L kubernetes.io/arch` if unsure:
 
 ```bash
 podman build --platform linux/amd64 -f docker/demo/Containerfile \
-  -t registry.company-group.com/openepcis/odoo-demo:18 .
+  -t registry.company-group.com/openepcis/openepcis-platform/odoo-demo:18 .
 ```
 
-For a proper multi-arch image, build per platform and assemble a manifest list:
-
-```bash
-podman build --platform linux/amd64,linux/arm64 \
-  --manifest registry.company-group.com/openepcis/odoo-demo:18 \
-  -f docker/demo/Containerfile .
-```
+No emulation is needed for a cross-architecture build here: the image only
+copies files, so nothing from the foreign base image is ever executed.
 
 ## Push
 
-Pushing to the GitLab container registry needs a login first
-(`read_registry`/`write_registry` scope):
-
 ```bash
-podman login registry.company-group.com
-podman push registry.company-group.com/openepcis/odoo-demo:18
-# or, for the manifest list:
-podman manifest push registry.company-group.com/openepcis/odoo-demo:18
+podman login registry.company-group.com   # needs write_registry
+podman push registry.company-group.com/openepcis/openepcis-platform/odoo-demo:18
 ```
 
-The image build is deliberately **manual** for now — it is not part of CI.
+The build is deliberately **manual**. This repository's CI runs on GitHub while
+the registry is GitLab's, and a demo image is rebuilt when the addon changes
+enough to matter — a judgement, not an event worth wiring a pipeline for.
 
 [openepcis-platform]: https://code.company-group.com/openepcis/openepcis-platform
