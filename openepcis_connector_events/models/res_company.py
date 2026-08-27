@@ -34,6 +34,15 @@ class ResCompany(models.Model):
         "and only has to make sure it never repeats one.",
     )
 
+    openepcis_events_since = fields.Char(
+        string="Events read up to",
+        readonly=True,
+        copy=False,
+        help="How far the inbox has read, as a record time. The repository's own "
+        "write clock rather than the reporter's, so it only moves forward and an "
+        "outage costs one run rather than a reconciliation.",
+    )
+
     @api.constrains("openepcis_gcp")
     def _check_openepcis_gcp(self):
         for company in self:

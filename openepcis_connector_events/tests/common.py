@@ -78,6 +78,27 @@ class FakeCapture:
         ]
 
 
+class FakeQuery:
+    """Hands back events that were put into it, and remembers what it was asked."""
+
+    def __init__(self):
+        self.pages = []
+        self.asked = []
+        self.error_to_raise = None
+
+    def since(self, since="", per_page=100, pages=50):
+        self.asked.append(since)
+        if self.error_to_raise:
+            raise self.error_to_raise
+        return list(self.pages.pop(0)) if self.pages else []
+
+    def for_epc(self, epc, per_page=100):
+        return []
+
+    def check(self):
+        return ""
+
+
 class EventCase(LotCase):
     @classmethod
     def setUpClass(cls):
@@ -106,6 +127,14 @@ class EventCase(LotCase):
         )
         patcher.start()
         self.addCleanup(patcher.stop)
+        self.query = FakeQuery()
+        query_patcher = patch.object(
+            OpenepcisClient,
+            "_epcis_query",
+            lambda _self, company=None: self.query,
+        )
+        query_patcher.start()
+        self.addCleanup(query_patcher.stop)
 
     # ------------------------------------------------------------------
     # Movements

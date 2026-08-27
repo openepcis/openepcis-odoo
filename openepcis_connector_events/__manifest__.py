@@ -31,6 +31,7 @@ outbox: validating a transfer never waits for the network.
         "data/ir_sequence_data.xml",
         "data/ir_cron_data.xml",
         "views/openepcis_event_views.xml",
+        "views/openepcis_inbound_event_views.xml",
         "views/stock_views.xml",
         "views/res_config_settings_views.xml",
     ],

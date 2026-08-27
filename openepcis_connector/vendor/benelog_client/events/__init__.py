@@ -21,12 +21,14 @@ from .document import (
     sgln,
     sscc_uri,
 )
-from .service import Capture, CaptureOutcome, CaptureReceipt
+from .service import Capture, CaptureOutcome, CaptureReceipt, EventPage, Query
 
 __all__ = [
     "Capture",
     "CaptureOutcome",
     "CaptureReceipt",
+    "EventPage",
+    "Query",
     "aggregation_event",
     "biz_transaction",
     "cbv",

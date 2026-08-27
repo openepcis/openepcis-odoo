@@ -23,5 +23,26 @@
       <field name="active" eval="True"/>
     </record>
 
+    <!--
+      The reading direction. Five minutes rather than one: an event from
+      somebody else is news, and news does not go stale as fast as our own
+      outbox does — nobody is waiting at a loading bay for it.
+
+      Pull rather than a subscription, and for one reason: catching up. The
+      repository stamps recordTime as it writes, so a run that missed an hour
+      simply asks for that hour next time. Nothing has to hold a delivery queue,
+      and this Odoo does not have to be reachable from outside.
+    -->
+    <record id="cron_poll_inbound_events" model="ir.cron">
+      <field name="name">OpenEPCIS: read visibility events</field>
+      <field name="model_id" ref="model_openepcis_inbound_event"/>
+      <field name="state">code</field>
+      <field name="code">model._cron_poll()</field>
+      <field name="interval_number">5</field>
+      <field name="interval_type">minutes</field>
+      <field name="nextcall" eval="(DateTime.now() + timedelta(minutes=5)).strftime('%Y-%m-%d %H:%M:%S')"/>
+      <field name="active" eval="True"/>
+    </record>
+
   </data>
 </odoo>

@@ -14,11 +14,15 @@ second; the repository then answers 403 without saying which role it missed.
 from odoo import _, api, models
 from odoo.exceptions import UserError
 
-from ..vendored import BenelogError, Capture, Client, ClientConfig
+from ..vendored import BenelogError, Capture, Client, ClientConfig, Query
 
 #: Cached per (database, company, address). The client is a thin wrapper over a
 #: requests session; building one per event would open a connection per event.
 _CAPTURES = {}
+
+#: The same, for the reading direction. Separate because the two are asked for
+#: at different moments and by different scheduled actions.
+_QUERIES = {}
 
 
 class OpenepcisClient(models.AbstractModel):
@@ -60,6 +64,31 @@ class OpenepcisClient(models.AbstractModel):
         return capture
 
     @api.model
+    def _epcis_query(self, company=None):
+        """The query service for a company's repository.
+
+        Same address and same credential as capture — what differs is the role
+        behind the token, and that only shows itself on the first request.
+        """
+        company = self._company(company)
+        url = self._epcis_url(company)
+        if not url:
+            raise UserError(
+                _(
+                    "No EPCIS repository is configured for %(company)s.\n"
+                    "Settings > General Settings > OpenEPCIS.",
+                    company=company.display_name,
+                )
+            )
+        auth, _client = self._bound(company.sudo())
+        key = (self.env.cr.dbname, company.id, url)
+        query = _QUERIES.get(key)
+        if query is None:
+            query = Query(Client(ClientConfig(base_url=url), auth))
+            _QUERIES[key] = query
+        return query
+
+    @api.model
     def _epcis_check(self, company=None):
         """What stands between this deployment and a captured event.
 
@@ -70,6 +99,12 @@ class OpenepcisClient(models.AbstractModel):
         if not company.sudo().openepcis_epcis_url:
             return _("No EPCIS repository address is deposited.")
         try:
-            return self._epcis_capture(company).check()
+            complaint = self._epcis_capture(company).check()
+            if complaint:
+                return complaint
+            # Reading is a second right, and a token can hold one without the
+            # other. Checking only the sending half is how an inbox ends up
+            # silent and looking healthy.
+            return self._epcis_query(company).check()
         except BenelogError as error:
             return str(error)

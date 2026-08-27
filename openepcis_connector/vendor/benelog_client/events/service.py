@@ -20,9 +20,11 @@ mentions no role at all. :meth:`Capture.check` exists to turn that into a
 sentence somebody can act on, at setup time rather than at the first delivery.
 """
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from typing import Any
+
+from urllib.parse import quote
 
 from ..core.client import Client
 from ..core.errors import BenelogError
@@ -31,6 +33,10 @@ from ..core.errors import BenelogError
 #: choice — the standard names the path, and every conformant repository serves
 #: it. Only the host in front of it varies.
 CAPTURE_PATH = "/capture"
+
+#: Where a repository answers questions about what it holds. Fixed by EPCIS 2.0
+#: in the same way as the capture path.
+EVENTS_PATH = "/events"
 
 
 @dataclass(frozen=True)
@@ -180,3 +186,129 @@ def _error_text(error: Any) -> str:
                 return str(error[key])
         return str(dict(error))
     return str(error)
+
+
+@dataclass(frozen=True)
+class EventPage:
+    """One page of events, and the token for the next one if there is one.
+
+    :param events: the events themselves, as the repository sent them.
+    :param next_token: opaque token for the following page, empty at the end.
+    """
+
+    events: list[Mapping[str, Any]] = field(default_factory=list)
+    next_token: str = ""
+
+    @property
+    def more(self) -> bool:
+        return bool(self.next_token)
+
+
+class Query:
+    """Reading events back out of a repository.
+
+    The counterpart to :class:`Capture`, and it takes the same client: one
+    address, one credential, two directions. What differs is the permission —
+    writing needs the ``capture`` role, reading needs ``query``, and holding one
+    says nothing about holding the other. :meth:`check` exists because that
+    difference is otherwise discovered by a polling job in the small hours.
+
+    Reading is by ``recordTime``, never ``eventTime``. ``recordTime`` is stamped
+    by the repository as it writes, so it only ever moves forward; ``eventTime``
+    belongs to whoever reported the event and can be anything, including
+    yesterday. A watermark built on the wrong one of those two silently skips
+    events that arrive late.
+    """
+
+    def __init__(self, client: Client) -> None:
+        self._client = client
+
+    def page(
+        self,
+        since: str = "",
+        per_page: int = 100,
+        next_token: str = "",
+    ) -> EventPage:
+        """One page of events recorded at or after ``since``.
+
+        :param since: ISO 8601 timestamp **with an offset**. Without one the
+            repository refuses it — and used to do so with a 500, which is why
+            the offset is worth insisting on here rather than finding out there.
+        :param next_token: continue a previous page instead of starting over.
+        """
+        params: dict[str, Any] = {"perPage": per_page}
+        if next_token:
+            params["nextPageToken"] = next_token
+        elif since:
+            params["GE_recordTime"] = since
+        body = self._client.get(EVENTS_PATH, params=params) or {}
+        return EventPage(events=_events_of(body), next_token=_next_token(body))
+
+    def since(
+        self, since: str = "", per_page: int = 100, pages: int = 50
+    ) -> Iterator[Mapping[str, Any]]:
+        """Every event recorded at or after ``since``, page after page.
+
+        :param pages: how many pages to walk at most. A guard, not a setting:
+            a repository that keeps handing out a next-page token — because a
+            catch-up started too far back, or because the token is not advancing
+            — must not turn one scheduled run into an unbounded one.
+        """
+        token = ""
+        for _ in range(pages):
+            page = self.page(since=since, per_page=per_page, next_token=token)
+            yield from page.events
+            if not page.more:
+                return
+            token = page.next_token
+
+    def for_epc(self, epc: str, per_page: int = 100) -> list[Mapping[str, Any]]:
+        """Everything the repository will show us about one identifier."""
+        body = self._client.get(
+            f"/epcs/{quote(epc, safe='')}/events", params={"perPage": per_page}
+        ) or {}
+        return _events_of(body)
+
+    def check(self) -> str:
+        """Whether this deployment will answer questions, said in one sentence.
+
+        Empty when it will. The 403 case is the one worth naming: a credential
+        that captures perfectly well can be refused here, and an inbox that
+        treats "no permission" as "nothing happened" stays quiet forever and
+        looks healthy doing it.
+        """
+        try:
+            self._client.get(EVENTS_PATH, params={"perPage": 1})
+        except BenelogError as error:
+            if error.status == 403:
+                return (
+                    "The repository accepted the credential but refused the request: this "
+                    "identity does not hold the 'query' role. Reading events is a separate "
+                    "permission from capturing them."
+                )
+            if error.status == 401:
+                return "The repository did not accept the credential at all."
+            if error.status == 404:
+                return (
+                    "No EPCIS repository answered at this address — the events endpoint is "
+                    "not there. Check that this is the repository's host and not the "
+                    "resolver's."
+                )
+            return f"The repository could not be reached: {error}"
+        return ""
+
+
+def _events_of(body: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """The event list out of an EPCIS query response, however deep it sits."""
+    epcis_body = body.get("epcisBody") or {}
+    events = epcis_body.get("eventList")
+    if events is None:
+        # A named-query response wraps the same list one level further down.
+        events = (epcis_body.get("queryResults") or {}).get("resultsBody", {}).get(
+            "eventList"
+        )
+    return list(events or [])
+
+
+def _next_token(body: Mapping[str, Any]) -> str:
+    return str(body.get("nextPageToken") or "")
