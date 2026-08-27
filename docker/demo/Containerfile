@@ -3,11 +3,12 @@
 # Demo image for the demo-odoo Terraform module (openepcis-platform):
 # stock Odoo 18 with the connector addons preinstalled.
 #
-# All three ship together because they are one story: the connector publishes
-# the product, the stock bridge publishes the lots and serials underneath it,
-# and the expiry bridge maps the dates GS1 asks for on those lots. Two of them
-# carry auto_install, so Odoo decides for itself whether they apply — an image
-# without stock installed never activates the stock bridge.
+# They ship together because they are one story: the connector publishes the
+# product, the stock bridge the lots and serials underneath it, the expiry
+# bridge the dates GS1 asks about on those lots, and the events addon what
+# became of them. Three carry auto_install, so Odoo decides for itself whether
+# they apply — an image without stock installed never activates the stock
+# bridge, and one without a till never reads a sale as a sale.
 #
 # The base image is fully qualified: podman on a host without
 # unqualified-search registries refuses a short name outright.
@@ -26,3 +27,5 @@ FROM docker.io/library/odoo:18
 COPY --chown=odoo:odoo openepcis_connector /mnt/extra-addons/openepcis_connector
 COPY --chown=odoo:odoo openepcis_connector_stock /mnt/extra-addons/openepcis_connector_stock
 COPY --chown=odoo:odoo openepcis_connector_product_expiry /mnt/extra-addons/openepcis_connector_product_expiry
+COPY --chown=odoo:odoo openepcis_connector_events /mnt/extra-addons/openepcis_connector_events
+COPY --chown=odoo:odoo openepcis_connector_events_pos /mnt/extra-addons/openepcis_connector_events_pos

@@ -16,3 +16,5 @@ tools
 openepcis_connector/tests
 openepcis_connector_stock/tests
 openepcis_connector_product_expiry/tests
+openepcis_connector_events/tests
+openepcis_connector_events_pos/tests
