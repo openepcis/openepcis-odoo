@@ -1,0 +1,10 @@
+# Part of the OpenEPCIS connector for Odoo. See LICENSE (LGPL-3).
+from . import openepcis_client
+from . import openepcis_event
+from . import openepcis_inbound_event
+from . import res_company
+from . import res_config_settings
+from . import stock_location
+from . import stock_picking_type
+from . import stock_quant_package
+from . import stock_picking

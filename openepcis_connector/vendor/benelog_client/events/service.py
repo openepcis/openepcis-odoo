@@ -1,0 +1,314 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 benelog GmbH & Co. KG
+"""Delivering events to an EPCIS repository, and finding out what became of them.
+
+Capture is asynchronous, and that is not an implementation detail to be hidden.
+``POST /capture`` answers ``202 Accepted`` with a ``Location`` naming a job: the
+repository has taken custody of the document and will validate it afterwards.
+An event can therefore be *accepted* and later *rejected*, and a connector that
+treats the 202 as success reports a delivery that never happened.
+
+So this returns a receipt rather than a boolean, and offers to ask again. A host
+adapter can record the receipt against its own row and resolve it on the next
+run of its queue — which is exactly what an outbox wants and what a fire-and-
+forget call cannot give it.
+
+The repository is a different service from the resolver, on its own host and
+with its own permission: capture needs the ``capture`` role, and a token that
+publishes master data perfectly well is refused here with a ``403`` that
+mentions no role at all. :meth:`Capture.check` exists to turn that into a
+sentence somebody can act on, at setup time rather than at the first delivery.
+"""
+
+from collections.abc import Iterator, Mapping
+from dataclasses import dataclass, field
+from typing import Any
+
+from urllib.parse import quote
+
+from ..core.client import Client
+from ..core.errors import BenelogError
+
+#: Where a repository takes documents. Fixed by EPCIS 2.0, not a deployment
+#: choice — the standard names the path, and every conformant repository serves
+#: it. Only the host in front of it varies.
+CAPTURE_PATH = "/capture"
+
+#: Where a repository answers questions about what it holds. Fixed by EPCIS 2.0
+#: in the same way as the capture path.
+EVENTS_PATH = "/events"
+
+
+@dataclass(frozen=True)
+class CaptureReceipt:
+    """What the repository gave back when it accepted a document.
+
+    :param job: identifier of the capture job, taken from ``Location``. Empty
+        when the repository answered without one, which is legal and means the
+        outcome cannot be asked about later.
+    :param event_ids: the identifiers this side minted, kept so a host adapter
+        can record what it claimed before it knows whether the claim stuck.
+    """
+
+    job: str
+    event_ids: tuple[str, ...] = ()
+
+    @property
+    def answerable(self) -> bool:
+        """Whether :meth:`Capture.outcome` can say anything about this."""
+        return bool(self.job)
+
+
+@dataclass(frozen=True)
+class CaptureOutcome:
+    """The repository's verdict on a job.
+
+    :param running: still being validated. Neither stored nor refused yet.
+    :param success: stored. Only meaningful once ``running`` is false and
+        ``known`` is true.
+    :param known: whether the repository could say anything at all. A job it
+        does not recognise is *not* a success: rejected documents and forgotten
+        ones answer alike, and reading that as "stored" turns a refusal into a
+        delivery. The honest answer is that nobody knows.
+    :param errors: what was wrong, in the repository's own words. Never
+        paraphrased here — a validation message names a field, and rewriting it
+        loses the field.
+    """
+
+    running: bool
+    success: bool
+    known: bool = True
+    errors: tuple[str, ...] = field(default=())
+
+    @property
+    def settled(self) -> bool:
+        return not self.running
+
+
+class Capture:
+    """Delivery of EPCIS documents into one repository.
+
+    :param client: a :class:`~benelog_client.core.client.Client` pointed at the
+        **repository**, not at the resolver. They are two services; giving this
+        the resolver's client produces a ``404`` on a path the resolver never
+        claimed to serve.
+    """
+
+    def __init__(self, client: Client) -> None:
+        self._client = client
+
+    def submit(self, epcis_document: Mapping[str, Any]) -> CaptureReceipt:
+        """Hand a document over.
+
+        :raises BenelogError: if the repository refuses it outright — a
+            malformed document, a missing permission, an unreachable host. A
+            document that is accepted and *then* found faulty does not raise;
+            ask :meth:`outcome`.
+        """
+        response = self._client.request("POST", CAPTURE_PATH, payload=epcis_document, raw=True)
+        return CaptureReceipt(
+            job=_job_from(response.headers.get("Location", "")),
+            event_ids=_event_ids(epcis_document),
+        )
+
+    def outcome(self, receipt: CaptureReceipt | str) -> CaptureOutcome:
+        """Ask what became of a job.
+
+        A job the repository does not recognise comes back as *unknown*, not as
+        a success. It is tempting to read it the other way — jobs are retained
+        and then forgotten, and forgetting usually follows storing — but a
+        refused document answers the same way, and a queue that calls that a
+        delivery is worse than one that admits it cannot tell.
+        """
+        job = receipt if isinstance(receipt, str) else receipt.job
+        if not job:
+            raise ValueError("this receipt carries no job to ask about")
+        try:
+            body = self._client.get(f"{CAPTURE_PATH}/{job}")
+        except BenelogError as error:
+            if error.status == 404:
+                return CaptureOutcome(running=False, success=False, known=False)
+            raise
+        return _outcome_from(body or {})
+
+    def check(self) -> str:
+        """Whether this deployment will accept events, said in one sentence.
+
+        Returns an empty string when it will. Otherwise a sentence naming what
+        is missing — meant to be shown in a settings screen, where it can still
+        be fixed, rather than discovered by a queue at three in the morning.
+        """
+        try:
+            self._client.get(CAPTURE_PATH, params={"perPage": 1})
+        except BenelogError as error:
+            if error.status == 403:
+                return (
+                    "The repository accepted the credential but refused the request: this "
+                    "identity does not hold the 'capture' role. Capture is a separate "
+                    "permission from publishing master data."
+                )
+            if error.status == 401:
+                return "The repository did not accept the credential at all."
+            if error.status == 404:
+                return (
+                    "No EPCIS repository answered at this address — the capture endpoint is "
+                    "not there. Check that this is the repository's host and not the "
+                    "resolver's."
+                )
+            return f"The repository could not be reached: {error}"
+        return ""
+
+
+def _job_from(location: str) -> str:
+    """The job id out of a ``Location``, whether absolute or relative."""
+    return location.rstrip("/").rsplit("/", 1)[-1] if location else ""
+
+
+def _event_ids(epcis_document: Mapping[str, Any]) -> tuple[str, ...]:
+    body = epcis_document.get("epcisBody") or {}
+    events = body.get("eventList") or []
+    return tuple(event["eventID"] for event in events if event.get("eventID"))
+
+
+def _outcome_from(body: Mapping[str, Any]) -> CaptureOutcome:
+    errors = body.get("errors") or []
+    return CaptureOutcome(
+        running=bool(body.get("running")),
+        success=bool(body.get("success")),
+        errors=tuple(_error_text(error) for error in errors),
+    )
+
+
+def _error_text(error: Any) -> str:
+    if isinstance(error, Mapping):
+        for key in ("title", "detail", "message", "type"):
+            if error.get(key):
+                return str(error[key])
+        return str(dict(error))
+    return str(error)
+
+
+@dataclass(frozen=True)
+class EventPage:
+    """One page of events, and the token for the next one if there is one.
+
+    :param events: the events themselves, as the repository sent them.
+    :param next_token: opaque token for the following page, empty at the end.
+    """
+
+    events: list[Mapping[str, Any]] = field(default_factory=list)
+    next_token: str = ""
+
+    @property
+    def more(self) -> bool:
+        return bool(self.next_token)
+
+
+class Query:
+    """Reading events back out of a repository.
+
+    The counterpart to :class:`Capture`, and it takes the same client: one
+    address, one credential, two directions. What differs is the permission —
+    writing needs the ``capture`` role, reading needs ``query``, and holding one
+    says nothing about holding the other. :meth:`check` exists because that
+    difference is otherwise discovered by a polling job in the small hours.
+
+    Reading is by ``recordTime``, never ``eventTime``. ``recordTime`` is stamped
+    by the repository as it writes, so it only ever moves forward; ``eventTime``
+    belongs to whoever reported the event and can be anything, including
+    yesterday. A watermark built on the wrong one of those two silently skips
+    events that arrive late.
+    """
+
+    def __init__(self, client: Client) -> None:
+        self._client = client
+
+    def page(
+        self,
+        since: str = "",
+        per_page: int = 100,
+        next_token: str = "",
+    ) -> EventPage:
+        """One page of events recorded at or after ``since``.
+
+        :param since: ISO 8601 timestamp **with an offset**. Without one the
+            repository refuses it — and used to do so with a 500, which is why
+            the offset is worth insisting on here rather than finding out there.
+        :param next_token: continue a previous page instead of starting over.
+        """
+        params: dict[str, Any] = {"perPage": per_page}
+        if next_token:
+            params["nextPageToken"] = next_token
+        elif since:
+            params["GE_recordTime"] = since
+        body = self._client.get(EVENTS_PATH, params=params) or {}
+        return EventPage(events=_events_of(body), next_token=_next_token(body))
+
+    def since(
+        self, since: str = "", per_page: int = 100, pages: int = 50
+    ) -> Iterator[Mapping[str, Any]]:
+        """Every event recorded at or after ``since``, page after page.
+
+        :param pages: how many pages to walk at most. A guard, not a setting:
+            a repository that keeps handing out a next-page token — because a
+            catch-up started too far back, or because the token is not advancing
+            — must not turn one scheduled run into an unbounded one.
+        """
+        token = ""
+        for _ in range(pages):
+            page = self.page(since=since, per_page=per_page, next_token=token)
+            yield from page.events
+            if not page.more:
+                return
+            token = page.next_token
+
+    def for_epc(self, epc: str, per_page: int = 100) -> list[Mapping[str, Any]]:
+        """Everything the repository will show us about one identifier."""
+        body = self._client.get(
+            f"/epcs/{quote(epc, safe='')}/events", params={"perPage": per_page}
+        ) or {}
+        return _events_of(body)
+
+    def check(self) -> str:
+        """Whether this deployment will answer questions, said in one sentence.
+
+        Empty when it will. The 403 case is the one worth naming: a credential
+        that captures perfectly well can be refused here, and an inbox that
+        treats "no permission" as "nothing happened" stays quiet forever and
+        looks healthy doing it.
+        """
+        try:
+            self._client.get(EVENTS_PATH, params={"perPage": 1})
+        except BenelogError as error:
+            if error.status == 403:
+                return (
+                    "The repository accepted the credential but refused the request: this "
+                    "identity does not hold the 'query' role. Reading events is a separate "
+                    "permission from capturing them."
+                )
+            if error.status == 401:
+                return "The repository did not accept the credential at all."
+            if error.status == 404:
+                return (
+                    "No EPCIS repository answered at this address — the events endpoint is "
+                    "not there. Check that this is the repository's host and not the "
+                    "resolver's."
+                )
+            return f"The repository could not be reached: {error}"
+        return ""
+
+
+def _events_of(body: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """The event list out of an EPCIS query response, however deep it sits."""
+    epcis_body = body.get("epcisBody") or {}
+    events = epcis_body.get("eventList")
+    if events is None:
+        # A named-query response wraps the same list one level further down.
+        events = (epcis_body.get("queryResults") or {}).get("resultsBody", {}).get(
+            "eventList"
+        )
+    return list(events or [])
+
+
+def _next_token(body: Mapping[str, Any]) -> str:
+    return str(body.get("nextPageToken") or "")

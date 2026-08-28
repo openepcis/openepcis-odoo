@@ -81,6 +81,35 @@ Both are GLNs; the resolver routes them separately.
 
 ---
 
+## Lots and serial numbers
+
+A GTIN names the *model* of a thing. The batch it came from and the single unit
+in front of you are one level down, and GS1 keeps that level in the Digital Link
+path: `/01/<gtin>` is the model, `/01/<gtin>/10/<lot>` the batch,
+`/01/<gtin>/21/<serial>` the unit. The catalog stores a distinct document at
+each level.
+
+The bridge addon **`openepcis_connector_stock`** publishes Odoo's lots and
+serial numbers (`stock.lot`) to those instance paths. It installs itself
+automatically wherever this connector and the Inventory app are both present —
+the main addon stays dependent on `product` only. Whether a record becomes a
+batch or a serial follows the product's tracking setting, and the instance-level
+Digital Link with its QR code appears on the lot form, where a warehouse
+actually prints labels.
+
+One rule of order: **the product goes first.** An instance document hangs off
+the product's GTIN, so a lot whose product is not published yet is not an
+error — it waits, says so on its form, and follows on its own the moment the
+product lands in the catalog.
+
+Instance fields are ordinary mapping rows. A second, data-only bridge,
+**`openepcis_connector_product_expiry`**, maps the expiry dates that the
+`product_expiry` module keeps on lots — expiration date, best-before date — so a
+database without that module never carries mapping rows pointing at fields it
+does not have.
+
+---
+
 ## Installation
 
 ```bash
@@ -240,8 +269,11 @@ prefix for anything experimental — GS1 reserves it for exactly this.
 docker compose up -d
 
 # The test suite
-docker compose run --rm odoo odoo -d test -i openepcis_connector \
-  --test-enable --test-tags /openepcis_connector --stop-after-init
+docker compose run --rm odoo odoo -d test \
+  -i openepcis_connector,openepcis_connector_stock,openepcis_connector_product_expiry \
+  --test-enable \
+  --test-tags /openepcis_connector,/openepcis_connector_stock,/openepcis_connector_product_expiry \
+  --stop-after-init
 
 # Lint and formatting, as CI runs them
 ruff check . && ruff format --check .
