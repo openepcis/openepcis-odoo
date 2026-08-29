@@ -23,7 +23,6 @@ sentence somebody can act on, at setup time rather than at the first delivery.
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from typing import Any
-
 from urllib.parse import quote
 
 from ..core.client import Client
@@ -264,9 +263,10 @@ class Query:
 
     def for_epc(self, epc: str, per_page: int = 100) -> list[Mapping[str, Any]]:
         """Everything the repository will show us about one identifier."""
-        body = self._client.get(
-            f"/epcs/{quote(epc, safe='')}/events", params={"perPage": per_page}
-        ) or {}
+        body = (
+            self._client.get(f"/epcs/{quote(epc, safe='')}/events", params={"perPage": per_page})
+            or {}
+        )
         return _events_of(body)
 
     def check(self) -> str:
@@ -304,9 +304,7 @@ def _events_of(body: Mapping[str, Any]) -> list[Mapping[str, Any]]:
     events = epcis_body.get("eventList")
     if events is None:
         # A named-query response wraps the same list one level further down.
-        events = (epcis_body.get("queryResults") or {}).get("resultsBody", {}).get(
-            "eventList"
-        )
+        events = (epcis_body.get("queryResults") or {}).get("resultsBody", {}).get("eventList")
     return list(events or [])
 
 
