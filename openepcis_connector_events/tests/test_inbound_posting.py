@@ -31,6 +31,10 @@ class TestInboundPosting(EventCase):
             }
         )
         self.product = self._published_product(tracking="lot")
+        # Every test here needs a transfer that is genuinely reserved, and a
+        # reservation needs stock. Odoo refuses a quant for a consumable, which
+        # is what a product is unless it is told otherwise.
+        self.product.product_tmpl_id.is_storable = True
         self.lot = self._lot("LOT-952-P1", self.product)
         self.identifier = "https://id.gs1.org/01/%s/10/%s" % (
             self.product.barcode,
