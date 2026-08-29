@@ -98,6 +98,46 @@ class TestWhereItHappened(EventCase):
             "the transfer should say why it reported nothing",
         )
 
+    def test_without_a_completion_time_nothing_is_reported_and_it_is_said_so(self):
+        """An invented event time is a false statement with an identity.
+
+        The event time goes into the canonical event hash, which is the event's
+        identity. Standing in the moment of reporting would therefore not only
+        misstate when the goods moved — it would give the same movement a
+        different identity every time it was sent.
+        """
+        product = self._published_product(tracking="none")
+        picking = self._transfer(self._incoming_type(), product)
+        already_queued = self._queued()
+        # Odoo stamps date_done in _action_done, so this is the shape that is
+        # left over: a transfer that is done and cannot say when.
+        picking.write({"date_done": False})
+
+        picking._openepcis_report()
+
+        self.assertEqual(self._queued(), already_queued, "nothing new was queued")
+        self.assertTrue(
+            any("when it happened" in (message.body or "") for message in picking.message_ids),
+            "the transfer should say why it reported nothing",
+        )
+
+    def test_the_event_time_is_the_completion_time_not_the_reporting_time(self):
+        import json
+        from datetime import datetime
+
+        product = self._published_product(tracking="none")
+        picking = self._transfer(self._incoming_type(), product)
+        # Report again from scratch, with a completion time that is nowhere
+        # near now: the queue recognises a movement it already holds, so the
+        # first row has to go before the second report can say anything.
+        self._queued().sudo().unlink()
+        picking.write({"date_done": datetime(2026, 8, 10, 9, 0, 0)})
+
+        picking._openepcis_report()
+
+        event = json.loads(self._queued().payload)["epcisBody"]["eventList"][0]
+        self.assertEqual(event["eventTime"], "2026-08-10T09:00:00.000Z")
+
     def _read_point(self):
         import json
 
