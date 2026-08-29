@@ -48,9 +48,7 @@ class StockLocation(models.Model):
                     _(
                         "'%(gln)s' is not a usable GLN. %(why)s",
                         gln=location.openepcis_gln,
-                        why=self.env["openepcis.sync.mixin"]._openepcis_phrase_key_problem(
-                            problem
-                        ),
+                        why=self.env["openepcis.sync.mixin"]._openepcis_phrase_key_problem(problem),
                     )
                 )
 

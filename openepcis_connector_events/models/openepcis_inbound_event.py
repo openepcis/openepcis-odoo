@@ -111,7 +111,9 @@ class OpenepcisInboundEvent(models.Model):
             try:
                 query = client.with_company(company)._epcis_query(company)
             except Exception as error:  # a misconfigured company must not stop the rest
-                logger.warning("OpenEPCIS inbox: no query service for %s (%s)", company.display_name, error)
+                logger.warning(
+                    "OpenEPCIS inbox: no query service for %s (%s)", company.display_name, error
+                )
                 continue
             self._poll_company(company, query)
 
@@ -145,15 +147,15 @@ class OpenepcisInboundEvent(models.Model):
         except BenelogError as error:
             # A repository that cannot be read is not an empty repository. Leave
             # the watermark where it is; the next run asks for the same window.
-            logger.warning("OpenEPCIS inbox: %s could not be read (%s)", company.display_name, error)
+            logger.warning(
+                "OpenEPCIS inbox: %s could not be read (%s)", company.display_name, error
+            )
             return
         if newest:
             # Only after the run got through. A watermark advanced before the
             # work skips whatever the failure swallowed.
             company.sudo().openepcis_events_since = newest
-        logger.info(
-            "OpenEPCIS inbox: %s read %s events, kept %s", company.display_name, seen, kept
-        )
+        logger.info("OpenEPCIS inbox: %s read %s events, kept %s", company.display_name, seen, kept)
 
     @staticmethod
     def _watermark(since):
@@ -174,7 +176,12 @@ class OpenepcisInboundEvent(models.Model):
             parsed = datetime.fromisoformat(since.replace("Z", "+00:00"))
         except ValueError:
             return ""
-        return (parsed - timedelta(minutes=5)).astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        return (
+            (parsed - timedelta(minutes=5))
+            .astimezone(timezone.utc)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
 
     # ------------------------------------------------------------------
     # Receiving
@@ -236,15 +243,21 @@ class OpenepcisInboundEvent(models.Model):
     def _subject_of(self, kind, key, qualifier):
         """Resolve an identifier without a row — used before one is created."""
         if kind == "sscc":
-            return self.env["stock.quant.package"].sudo().search(
-                [("openepcis_sscc", "=", key)], limit=1
-            ) or None
+            return (
+                self.env["stock.quant.package"]
+                .sudo()
+                .search([("openepcis_sscc", "=", key)], limit=1)
+                or None
+            )
         product = self.env["product.product"].sudo().search([("barcode", "=", key)], limit=1)
         if not product or not qualifier:
             return product or None
-        return self.env["stock.lot"].sudo().search(
-            [("product_id", "=", product.id), ("name", "=", qualifier)], limit=1
-        ) or None
+        return (
+            self.env["stock.lot"]
+            .sudo()
+            .search([("product_id", "=", product.id), ("name", "=", qualifier)], limit=1)
+            or None
+        )
 
     @api.model
     def _receive(self, company, event):
@@ -399,6 +412,8 @@ class OpenepcisInboundEvent(models.Model):
 
     @api.model
     def _companies(self):
-        return self.env["res.company"].sudo().search(
-            [("openepcis_events_enabled", "=", True), ("openepcis_epcis_url", "!=", False)]
+        return (
+            self.env["res.company"]
+            .sudo()
+            .search([("openepcis_events_enabled", "=", True), ("openepcis_epcis_url", "!=", False)])
         )

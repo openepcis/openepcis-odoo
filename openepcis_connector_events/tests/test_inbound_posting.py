@@ -65,9 +65,7 @@ class TestInboundPosting(EventCase):
         return picking_type, picking
 
     def _hear(self, uuid="urn:uuid:p1", biz_step="shipping", party=TEST_PARTNER_GLN):
-        self.query.pages = [
-            [event(uuid, biz_step=biz_step, epc=self.identifier, party=party)]
-        ]
+        self.query.pages = [[event(uuid, biz_step=biz_step, epc=self.identifier, party=party)]]
         self.env["openepcis.inbound.event"]._cron_poll()
         return self.env["openepcis.inbound.event"].search([("event_uuid", "=", uuid)])
 
@@ -176,9 +174,7 @@ class TestInboundPosting(EventCase):
         """
         picking_type = self._incoming_type()
         self._arm(picking_type)
-        picking = self._open_transfer(
-            picking_type, self.product, quantity=1, partner=self.partner
-        )
+        picking = self._open_transfer(picking_type, self.product, quantity=1, partner=self.partner)
 
         row = self._hear(biz_step="shipping")
 

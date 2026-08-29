@@ -124,9 +124,7 @@ class StockPickingType(models.Model):
         for picking_type in self:
             biz_step, disposition = picking_type._openepcis_default_mapping()
             picking_type.openepcis_biz_step = picking_type.openepcis_biz_step or biz_step
-            picking_type.openepcis_disposition = (
-                picking_type.openepcis_disposition or disposition
-            )
+            picking_type.openepcis_disposition = picking_type.openepcis_disposition or disposition
 
     def _openepcis_default_mapping(self):
         """The (business step, disposition) this operation most likely means.

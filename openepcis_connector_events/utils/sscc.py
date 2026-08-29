@@ -55,7 +55,7 @@ def build(prefix, serial_reference, extension_digit="0"):
             "serial reference %s does not fit beside a %d-digit prefix — "
             "%d digits are left for it" % (reference, len(digits), room)
         )
-    body = "{}{}{}".format(str(extension_digit)[:1], digits, reference.zfill(room))
+    body = f"{str(extension_digit)[:1]}{digits}{reference.zfill(room)}"
     return gs1.with_check_digit(body)
 
 

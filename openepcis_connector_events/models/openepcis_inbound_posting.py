@@ -32,7 +32,7 @@ last step is skipped. Somebody reads a week of that log and then decides.
 
 import logging
 
-from odoo import _, api, fields, models
+from odoo import _, fields, models
 
 logger = logging.getLogger(__name__)
 
@@ -165,14 +165,20 @@ class OpenepcisInboundEvent(models.Model):
         """
         self.ensure_one()
         try:
-            result = picking.sudo().with_context(
-                skip_backorder=True,
-                picking_ids_not_to_backorder=picking.ids,
-            ).button_validate()
+            result = (
+                picking.sudo()
+                .with_context(
+                    skip_backorder=True,
+                    picking_ids_not_to_backorder=picking.ids,
+                )
+                .button_validate()
+            )
         except Exception as error:  # a partner's event must never break the run
             note = _("Refused by Odoo: %s") % error
             self.sudo().write({"posting_note": note})
-            logger.warning("OpenEPCIS inbox: %s could not post %s (%s)", self.event_uuid, picking.name, error)
+            logger.warning(
+                "OpenEPCIS inbox: %s could not post %s (%s)", self.event_uuid, picking.name, error
+            )
             return False
         if isinstance(result, dict) and result.get("type"):
             note = _("Odoo asked a question a scheduled run cannot answer; left for a person.")

@@ -72,9 +72,7 @@ class FakeCapture:
     @property
     def events(self):
         return [
-            event
-            for document in self.documents
-            for event in document["epcisBody"]["eventList"]
+            event for document in self.documents for event in document["epcisBody"]["eventList"]
         ]
 
 
@@ -145,8 +143,7 @@ class EventCase(LotCase):
         picking = self.env["stock.picking"].create(
             {
                 "picking_type_id": picking_type.id,
-                "location_id": picking_type.default_location_src_id.id
-                or self.supplier_location.id,
+                "location_id": picking_type.default_location_src_id.id or self.supplier_location.id,
                 "location_dest_id": picking_type.default_location_dest_id.id
                 or self.customer_location.id,
                 "partner_id": partner and partner.id,
@@ -179,8 +176,7 @@ class EventCase(LotCase):
         picking = self.env["stock.picking"].create(
             {
                 "picking_type_id": picking_type.id,
-                "location_id": picking_type.default_location_src_id.id
-                or self.supplier_location.id,
+                "location_id": picking_type.default_location_src_id.id or self.supplier_location.id,
                 "location_dest_id": picking_type.default_location_dest_id.id
                 or self.customer_location.id,
                 "partner_id": partner and partner.id,

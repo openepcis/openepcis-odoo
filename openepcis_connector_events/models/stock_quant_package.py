@@ -44,8 +44,7 @@ class StockQuantPackage(models.Model):
             if package.openepcis_sscc and not sscc.is_valid(package.openepcis_sscc):
                 raise ValidationError(
                     _(
-                        "'%s' is not a usable SSCC. It is 18 digits and ends in a "
-                        "check digit.",
+                        "'%s' is not a usable SSCC. It is 18 digits and ends in a check digit.",
                         package.openepcis_sscc,
                     )
                 )

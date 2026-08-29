@@ -142,9 +142,7 @@ class StockPicking(models.Model):
 
     def _openepcis_lines(self):
         self.ensure_one()
-        return self.move_line_ids.filtered(
-            lambda line: line.state == "done" and line.quantity > 0
-        )
+        return self.move_line_ids.filtered(lambda line: line.state == "done" and line.quantity > 0)
 
     def _openepcis_identifiers(self, lines):
         """The lines, read as EPCs and quantity elements.
