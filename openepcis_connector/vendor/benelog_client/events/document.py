@@ -49,6 +49,8 @@ from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime, timezone
 from typing import Any
 
+from . import cbv
+
 #: The GS1 namespace every identifier in an event is expressed in.
 ID_GS1_ORG = "https://id.gs1.org"
 
@@ -178,6 +180,48 @@ def idempotency_key(*parts: object) -> str:
     return "urn:uuid:" + str(uuid.uuid5(EVENT_NAMESPACE, name))
 
 
+def error_declaration(
+    *,
+    reason: str,
+    declaration_time: datetime,
+    corrective_event_ids: Sequence[str] = (),
+) -> dict[str, Any]:
+    """Say that a reported event was wrong, without rewriting the past.
+
+    EPCIS corrects by declaration, not by edit: the erroneous event stays, and a
+    second event repeats it with this block attached. That is possible because
+    the declaration fields are excluded from the canonical hash — the correction
+    therefore carries the same content identity as the event it corrects, and
+    nothing has to look the identifier up.
+
+    ``reason`` is one of the two CBV codes, and the choice is not cosmetic.
+    ``did_not_occur`` withdraws the event and must not name corrective events;
+    there is nothing left to put right. ``incorrect_data`` keeps the occurrence
+    and disputes the description, and ``corrective_event_ids`` points *forward*
+    at the events that state it properly.
+
+    A changed ``eventTime`` cannot be a correction of this kind: the time is
+    part of the canonical hash, so restating it makes a different event. Such a
+    case is ``incorrect_data`` plus a new event, never a repetition.
+    """
+    if reason not in (cbv.DID_NOT_OCCUR, cbv.INCORRECT_DATA):
+        raise ValueError(
+            f"{reason!r} is not a CBV error reason; use cbv.DID_NOT_OCCUR or cbv.INCORRECT_DATA"
+        )
+    if reason == cbv.DID_NOT_OCCUR and corrective_event_ids:
+        raise ValueError(
+            "did_not_occur withdraws the event, so it must not name corrective events "
+            "(CBV); use incorrect_data where a corrected statement follows"
+        )
+    declaration: dict[str, Any] = {
+        "declarationTime": _instant(declaration_time),
+        "reason": reason,
+    }
+    if corrective_event_ids:
+        declaration["correctiveEventIDs"] = list(corrective_event_ids)
+    return declaration
+
+
 def object_event(
     *,
     action: str,
@@ -192,6 +236,7 @@ def object_event(
     source_list: Sequence[tuple[str, str]] = (),
     destination_list: Sequence[tuple[str, str]] = (),
     event_identifier: str | None = None,
+    error_declaration: Mapping[str, Any] | None = None,
     extensions: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """An ObjectEvent: something happened to these goods.
@@ -216,6 +261,8 @@ def object_event(
         event["quantityList"] = [dict(element) for element in quantities]
     _place(event, read_point, biz_location)
     _paperwork(event, biz_transactions, source_list, destination_list)
+    if error_declaration:
+        event["errorDeclaration"] = dict(error_declaration)
     if extensions:
         event.update(extensions)
     return event
@@ -234,6 +281,7 @@ def aggregation_event(
     biz_location: str | None = None,
     biz_transactions: Sequence[tuple[str, str]] = (),
     event_identifier: str | None = None,
+    error_declaration: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """An AggregationEvent: these goods are now inside that container.
 
@@ -258,6 +306,8 @@ def aggregation_event(
         event["childQuantityList"] = [dict(element) for element in child_quantities]
     _place(event, read_point, biz_location)
     _paperwork(event, biz_transactions, (), ())
+    if error_declaration:
+        event["errorDeclaration"] = dict(error_declaration)
     return event
 
 

@@ -21,6 +21,9 @@
         <field name="company_id" groups="base.group_multi_company" optional="hide"/>
         <button name="action_retry" type="object" string="Send again" icon="fa-repeat"
                 invisible="state == 'captured'"/>
+        <button name="action_declare_error" type="object" string="Withdraw" icon="fa-undo"
+                confirm="This reports that the movement did not happen. The event stays on record; a withdrawal is sent alongside it."
+                invisible="state != 'captured' or corrected"/>
       </list>
     </field>
   </record>
@@ -51,6 +54,8 @@
             <group>
               <field name="event_hash"/>
               <field name="idem_key"/>
+              <field name="correction_of" invisible="not correction_of"/>
+              <field name="corrected" invisible="not corrected"/>
               <field name="job"/>
               <field name="attempts"/>
               <field name="error" invisible="not error"/>

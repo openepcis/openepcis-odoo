@@ -89,3 +89,13 @@ BOL = "bol"
 OWNING_PARTY = "owning_party"
 POSSESSING_PARTY = "possessing_party"
 LOCATION = "location"
+
+# -- Error declaration reasons ----------------------------------------------
+#
+# CBV defines exactly two, and they are not interchangeable. ``DID_NOT_OCCUR``
+# withdraws the event: what it said happened, did not. ``INCORRECT_DATA`` keeps
+# the occurrence and disputes the description, which is why it — and only it —
+# may name corrective events that state the description properly.
+
+DID_NOT_OCCUR = "did_not_occur"
+INCORRECT_DATA = "incorrect_data"

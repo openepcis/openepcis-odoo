@@ -37,7 +37,7 @@ from datetime import datetime, timezone
 from odoo import _, api, fields, models
 from odoo.exceptions import UserError
 
-from ..vendored import BenelogError, stamp_event_ids
+from ..vendored import BenelogError, cbv, error_declaration, stamp_event_ids
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +124,24 @@ class OpenepcisEvent(models.Model):
     attempts = fields.Integer(readonly=True, default=0)
     res_model = fields.Char(string="Source model", readonly=True)
     res_id = fields.Integer(string="Source", readonly=True)
+    correction_of = fields.Many2one(
+        "openepcis.event",
+        string="Corrects",
+        readonly=True,
+        ondelete="set null",
+        index=True,
+        help="The reported event this one withdraws. EPCIS corrects by declaration: "
+        "the original stays, and this repeats it with an error declaration attached.",
+    )
+    correction_ids = fields.One2many(
+        "openepcis.event", "correction_of", string="Corrections", readonly=True
+    )
+    corrected = fields.Boolean(compute="_compute_corrected", store=True)
+
+    @api.depends("correction_ids")
+    def _compute_corrected(self):
+        for row in self:
+            row.corrected = bool(row.correction_ids)
 
     _sql_constraints = [
         (
@@ -321,6 +339,88 @@ class OpenepcisEvent(models.Model):
         self.sudo().write({"state": "queued", "job": False})
         self._cron_capture()
         return True
+
+    def action_declare_error(self):
+        """Withdraw a reported event, by saying so rather than by deleting it.
+
+        A movement that turns out not to have happened — a transfer reversed, a
+        picking cancelled after the fact — cannot be taken back out of a
+        repository, and should not be: somebody may already have read it. EPCIS
+        answers this with an error declaration, and the shape of that answer is
+        the reason the whole identity scheme holds together. The declaration
+        fields are excluded from the canonical hash, so the correction carries
+        the same identity as the event it corrects; the repository recognises
+        which event is meant without this side knowing what it was called.
+
+        Only ``did_not_occur`` is offered here, and only that. The other CBV
+        reason, ``incorrect_data``, keeps the occurrence and disputes the
+        description — which means naming the events that state it properly, and
+        this connector mints no such events. Offering the code without the
+        events behind it would be an empty gesture.
+
+        Sent without an eventID, like every document leaving here: the
+        repository computes the canonical hash and finds the erroneous event by
+        it.
+        """
+        self.ensure_one()
+        if self.state != "captured":
+            raise UserError(
+                _(
+                    "%s is not stored yet. An event can only be withdrawn once the "
+                    "repository confirms it holds it — before that, there is nothing "
+                    "to withdraw.",
+                    self.name,
+                )
+            )
+        if self.corrected:
+            raise UserError(
+                _("%s has already been withdrawn.", self.name),
+            )
+        payload = json.loads(self.payload)
+        events = (payload.get("epcisBody") or {}).get("eventList") or []
+        if not events:
+            raise UserError(_("%s carries no event to withdraw.", self.name))
+        declaration = error_declaration(
+            reason=cbv.DID_NOT_OCCUR,
+            declaration_time=datetime.now(timezone.utc),
+        )
+        corrected_events = [{**event, "errorDeclaration": declaration} for event in events]
+        payload["epcisBody"] = {**payload.get("epcisBody", {}), "eventList": corrected_events}
+        row = self.sudo().create(
+            {
+                "name": _("%s (withdrawn)", self.name),
+                "company_id": self.company_id.id,
+                # Its own key, or the outbox would recognise the movement it
+                # already holds and hand back the row being corrected.
+                "idem_key": "%s|did_not_occur" % self.idem_key,
+                "event_hash": self._expected_event_id(payload),
+                "event_time": self.event_time,
+                "biz_step": self.biz_step,
+                "epc_count": self.epc_count,
+                "payload": json.dumps(payload, indent=1, sort_keys=False),
+                "res_model": self.res_model,
+                "res_id": self.res_id,
+                "correction_of": self.id,
+            }
+        )
+        logger.info("OpenEPCIS event %s: withdrawn by %s", self.name, row.name)
+        source = self._source_record()
+        if source is not None and hasattr(source, "message_post"):
+            source.sudo().message_post(
+                body=_(
+                    "EPCIS: the reported event %(what)s was withdrawn (did_not_occur). "
+                    "The original stays on record; the withdrawal is queued.",
+                    what=self.name,
+                )
+            )
+        return True
+
+    def _source_record(self):
+        self.ensure_one()
+        if not self.res_model or not self.res_id:
+            return None
+        record = self.env[self.res_model].browse(self.res_id).exists()
+        return record or None
 
     def action_open_source(self):
         self.ensure_one()

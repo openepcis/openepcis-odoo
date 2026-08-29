@@ -358,3 +358,63 @@ class TestAggregation(EventCase):
         package = self.env["stock.quant.package"].create({})
         self.assertTrue(package.openepcis_sscc)
         self.assertTrue(package.openepcis_sscc.startswith("0" + self.company.openepcis_gcp))
+
+
+@tagged("post_install", "-at_install")
+class TestWithdrawal(EventCase):
+    """Correcting by declaration: the original stays, a withdrawal joins it."""
+
+    def _captured_row(self):
+        self._transfer(self._incoming_type(), self._published_product(tracking="none"))
+        self._deliver()
+        row = self._queued()
+        self.assertEqual(row.state, "captured")
+        return row
+
+    def test_a_withdrawal_repeats_the_event_with_a_declaration(self):
+        import json
+
+        row = self._captured_row()
+
+        row.action_declare_error()
+
+        withdrawal = self.env["openepcis.event"].search([("correction_of", "=", row.id)])
+        self.assertTrue(withdrawal)
+        self.assertTrue(row.corrected)
+        event = json.loads(withdrawal.payload)["epcisBody"]["eventList"][0]
+        original = json.loads(row.payload)["epcisBody"]["eventList"][0]
+        self.assertEqual(event["errorDeclaration"]["reason"], "did_not_occur")
+        self.assertNotIn("correctiveEventIDs", event["errorDeclaration"])
+        # Everything else is the event that was reported, unchanged: that is
+        # what lets the repository recognise which event is being withdrawn.
+        self.assertEqual({k: v for k, v in event.items() if k != "errorDeclaration"}, original)
+
+    def test_the_withdrawal_carries_the_identity_of_what_it_withdraws(self):
+        # The declaration fields are outside the canonical hash, so both rows
+        # expect the same event id — which is the mechanism, not a coincidence.
+        row = self._captured_row()
+
+        row.action_declare_error()
+
+        withdrawal = self.env["openepcis.event"].search([("correction_of", "=", row.id)])
+        self.assertEqual(withdrawal.event_hash, row.event_hash)
+        self.assertNotEqual(withdrawal.idem_key, row.idem_key)
+
+    def test_nothing_is_withdrawn_before_the_repository_holds_it(self):
+        from odoo.exceptions import UserError
+
+        self._transfer(self._incoming_type(), self._published_product(tracking="none"))
+        row = self._queued()
+        self.assertEqual(row.state, "queued")
+
+        with self.assertRaises(UserError):
+            row.action_declare_error()
+
+    def test_an_event_is_withdrawn_once(self):
+        from odoo.exceptions import UserError
+
+        row = self._captured_row()
+        row.action_declare_error()
+
+        with self.assertRaises(UserError):
+            row.action_declare_error()
