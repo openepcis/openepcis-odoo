@@ -21,13 +21,29 @@ of goods, and it belongs in ``quantityList`` as an ``epcClass``. Putting an
 LGTIN in ``epcList`` is the single most common way to make an event that
 validates and means the wrong thing.
 
-**Event identity is derived, not drawn.** The ``eventID`` is a UUIDv5 over the
-facts the event states, so reporting the same movement twice — a retry, a
-resumed queue, a re-run of yesterday's export — produces the same identifier
-and the repository can recognise the second one as the first. An event with a
-random id is a new truth every time it is sent.
+**Event identity is the canonical CBV event hash.** The ``eventID`` is not a
+name chosen for the event but a property of it: ``ni:///sha-256;<hex>?ver=CBV2.0``,
+computed over everything the event asserts except a literal exclusion list
+(``eventID`` itself, ``recordTime``, ``errorDeclaration``, ``@context``).
+Anybody holding the event can recompute it, so two systems reporting the same
+observation arrive at the same identifier without having agreed on anything
+beforehand. Reporting the same movement twice — a retry, a resumed queue, a
+re-run of yesterday's export — therefore produces the same identifier and the
+repository recognises the second as the first.
+
+That holds only as long as every field is stable, which is why ``event_time``
+must come from the source record and never from the clock at send time: the
+event time is part of the statement and therefore part of the identity.
+
+The UUIDv5 that used to be the ``eventID`` has not gone away, it has changed
+jobs. It is the *sender's* idempotency key now (:func:`idempotency_key`) — what
+the outbox uses to recognise a movement it already holds — and it is no longer
+the event's name. The two had to be separated because an ErrorDeclaration
+deliberately repeats the eventID of the event it corrects, so the eventID
+cannot carry a uniqueness constraint any more.
 """
 
+import json
 import uuid
 from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime, timezone
@@ -39,9 +55,10 @@ ID_GS1_ORG = "https://id.gs1.org"
 #: JSON-LD context of EPCIS 2.0. Belongs on the document, not on the event.
 EPCIS_CONTEXT = "https://ref.gs1.org/standards/epcis/2.0.0/epcis-context.jsonld"
 
-#: UUIDv5 namespace for event identifiers minted by this library. Private and
-#: arbitrary, as RFC 4122 intends: its only job is to keep these identifiers
-#: from colliding with anybody else's derived UUIDs.
+#: UUIDv5 namespace for the sender-side idempotency keys this library derives
+#: (see :func:`idempotency_key`). Private and arbitrary, as RFC 4122 intends:
+#: its only job is to keep these keys from colliding with anybody else's
+#: derived UUIDs. It is no longer part of any event's identity.
 EVENT_NAMESPACE = uuid.UUID("9b7d5a24-1f6e-5c8a-9e42-6a0d3b5c7e11")
 
 #: Path order of the GTIN qualifiers, as GS1 prescribes it. Not alphabetical
@@ -141,14 +158,21 @@ def quantity_element(
     return element
 
 
-def event_id(*parts: object) -> str:
-    """A stable ``urn:uuid`` derived from the facts an event states.
+def idempotency_key(*parts: object) -> str:
+    """A stable ``urn:uuid`` the *sender* uses to recognise its own work.
 
-    Pass the things that make this event *this* event and no other: the
+    Pass the things that make this movement *this* movement and no other: the
     reporting system, the document it came from, the business step, the
     identifiers. Do not pass a timestamp taken at send time, or a counter —
     they change between two reports of the same movement, which is exactly the
     case this exists to survive.
+
+    This used to be the ``eventID``. It is not any more: the eventID is the
+    canonical event hash, which describes the event rather than the sender's
+    bookkeeping. Two differences follow, and both are the reason for the split.
+    The hash covers ``eventTime``, so a correction that restates the time is a
+    different event; and an ErrorDeclaration repeats the eventID on purpose, so
+    the eventID cannot be a unique key in an outbox. This can, and is.
     """
     name = "|".join("" if part is None else str(part) for part in parts)
     return "urn:uuid:" + str(uuid.uuid5(EVENT_NAMESPACE, name))
@@ -252,6 +276,68 @@ def document(
         "creationDate": _instant(creation_time or datetime.now(timezone.utc)),
         "epcisBody": {"eventList": [dict(event) for event in events]},
     }
+
+
+def stamp_event_ids(epcis_document: Mapping[str, Any]) -> dict[str, Any]:
+    """Give every event in the document the identifier it already has.
+
+    The canonical CBV event hash is computed over the finished event, so this
+    runs *after* the document is built, not before: the identity is a property
+    of the statement, and a statement is not complete until it is written down.
+    Returns a new document; the input is left alone.
+
+    The computation is local and takes single-digit milliseconds. That matters
+    more than it sounds: the outbox needs the identifier inside the transaction
+    that validates a transfer, with no network in reach, and the promise that
+    reporting never waits on a repository is not one to trade away for an
+    identifier.
+
+    :raises RuntimeError: when the optional hashing dependency is not installed.
+    """
+    events = list(epcis_document.get("epcisBody", {}).get("eventList", []))
+    if not events:
+        return dict(epcis_document)
+
+    hash_generator, json_to_py = _hashing()
+    # The library keeps its namespace table in a module global and never resets
+    # it. In a long-lived worker serving several tenants the prefixes of every
+    # document ever hashed accumulate there, and a prefix left over from an
+    # earlier document silently changes how this one canonicalises — the kind
+    # of fault that shows up after weeks and only in production.
+    json_to_py._namespaces.clear()
+
+    parsed = json_to_py.event_list_from_epcis_document_str(json.dumps(epcis_document))
+    hashes = hash_generator.epcis_hashes_from_events(parsed, "sha256")
+    if len(hashes) != len(events):
+        raise RuntimeError(
+            f"the hash generator answered {len(hashes)} identifiers for {len(events)} "
+            "events; refusing to guess which belongs to which"
+        )
+
+    stamped = dict(epcis_document)
+    body = dict(stamped.get("epcisBody", {}))
+    body["eventList"] = [
+        {**event, "eventID": event_id} for event, event_id in zip(events, hashes, strict=True)
+    ]
+    stamped["epcisBody"] = body
+    return stamped
+
+
+def _hashing() -> tuple[Any, Any]:
+    """The hashing library, imported where it is used.
+
+    Kept out of the module import so a host that never captures events does not
+    need the dependency at all — this client's only hard requirement is
+    ``requests``, and that is worth keeping.
+    """
+    try:
+        from epcis_event_hash_generator import hash_generator, json_to_py
+    except ImportError as missing:  # pragma: no cover - exercised by the message
+        raise RuntimeError(
+            "Computing an eventID needs the canonical hash generator. Install this "
+            "client with its 'hash' extra: pip install 'benelog-client[hash]'."
+        ) from missing
+    return hash_generator, json_to_py
 
 
 # -- Internals --------------------------------------------------------------

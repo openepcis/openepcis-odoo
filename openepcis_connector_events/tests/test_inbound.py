@@ -11,6 +11,10 @@ change that made posting happen by itself would break these tests first.
 
 from .common import TEST_PARTNER_GLN, EventCase
 
+OUR_HASH = (
+    "ni:///sha-256;f895a478db42352042ceb07ac96a607765697ca0a8e6c3fe76cbdefc537d185a?ver=CBV2.0"
+)
+
 
 def event(uuid, biz_step="receiving", epc=None, recorded="2026-08-27T22:13:29.000Z", party=None):
     body = {
@@ -74,14 +78,18 @@ class TestInbox(EventCase):
                 {
                     "name": "ours",
                     "company_id": self.company.id,
-                    "event_uuid": "urn:uuid:ours",
+                    "idem_key": "urn:uuid:ours",
+                    # What we expect the repository to call it. We do not send
+                    # this — the document leaves without an eventID — we only
+                    # recognise it coming back.
+                    "event_hash": OUR_HASH,
                     "event_time": "2026-08-27 22:13:00",
                     "payload": "{}",
                 }
             )
         )
         self.assertTrue(transfer)
-        self.query.pages = [[event("urn:uuid:ours")]]
+        self.query.pages = [[event(OUR_HASH)]]
         self._poll()
         self.assertEqual(self._rows().state, "ignored")
 

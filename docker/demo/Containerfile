@@ -29,3 +29,23 @@ COPY --chown=odoo:odoo openepcis_connector_stock /mnt/extra-addons/openepcis_con
 COPY --chown=odoo:odoo openepcis_connector_product_expiry /mnt/extra-addons/openepcis_connector_product_expiry
 COPY --chown=odoo:odoo openepcis_connector_events /mnt/extra-addons/openepcis_connector_events
 COPY --chown=odoo:odoo openepcis_connector_events_pos /mnt/extra-addons/openepcis_connector_events_pos
+
+# The canonical CBV event hash. The events addon declares it as an
+# external_dependency, so without it Odoo lists the addon as uninstallable —
+# which is the honest failure, but not a useful image.
+#
+# --break-system-packages because the official image is Debian and Odoo's own
+# Python packages live in the system interpreter; a venv here would be a second
+# interpreter that Odoo does not use.
+#
+# --no-deps, and not out of tidiness: the package declares Flask, Flask wants a
+# newer Werkzeug, and pip cannot uninstall the Debian-packaged Werkzeug that
+# Odoo itself runs on ("Cannot uninstall Werkzeug 3.0.1, RECORD file not
+# found"). Replacing Odoo's Werkzeug to satisfy a dependency that the package
+# never imports would trade a working web server for nothing. What it does
+# import is pyld and dateutil; both are installed here with their own chains.
+USER root
+RUN pip3 install --no-cache-dir --break-system-packages PyLD python-dateutil \
+    && pip3 install --no-cache-dir --break-system-packages --no-deps \
+        "epcis-event-hash-generator==1.9.3"
+USER odoo

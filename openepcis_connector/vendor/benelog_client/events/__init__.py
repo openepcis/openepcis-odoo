@@ -13,13 +13,14 @@ from .document import (
     aggregation_event,
     biz_transaction,
     document,
-    event_id,
+    idempotency_key,
     instance_uri,
     object_event,
     party,
     quantity_element,
     sgln,
     sscc_uri,
+    stamp_event_ids,
 )
 from .service import Capture, CaptureOutcome, CaptureReceipt, EventPage, Query
 
@@ -33,11 +34,12 @@ __all__ = [
     "biz_transaction",
     "cbv",
     "document",
-    "event_id",
+    "idempotency_key",
     "instance_uri",
     "object_event",
     "party",
     "quantity_element",
     "sgln",
     "sscc_uri",
+    "stamp_event_ids",
 ]

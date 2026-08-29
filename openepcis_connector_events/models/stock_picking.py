@@ -38,7 +38,7 @@ from ..vendored import (
     biz_transaction,
     cbv,
     document,
-    event_id,
+    idempotency_key,
     instance_uri,
     object_event,
     party,
@@ -101,6 +101,17 @@ class StockPicking(models.Model):
                     )
                 )
                 continue
+            event_time = picking._openepcis_event_time()
+            if not event_time:
+                picking.message_post(
+                    body=_(
+                        "No EPCIS event was reported: this transfer carries no completion "
+                        "time, and an event has to say when it happened. The moment of "
+                        "reporting is not that moment — it would put a different identity "
+                        "on the same movement every time it was sent."
+                    )
+                )
+                continue
             picking._openepcis_queue_aggregations(read_point)
             picking._openepcis_queue_movement(read_point)
 
@@ -134,10 +145,13 @@ class StockPicking(models.Model):
             biz_transactions=self._openepcis_biz_transactions(),
             source_list=self._openepcis_source_list(),
             destination_list=self._openepcis_destination_list(),
-            event_identifier=self._openepcis_event_id(biz_step, epcs, quantities),
         )
         self.env["openepcis.event"].queue(
-            document([event]), self.name, self.company_id, source=self
+            document([event]),
+            self.name,
+            self.company_id,
+            idem_key=self._openepcis_idem_key(biz_step, epcs, quantities),
+            source=self,
         )
 
     def _openepcis_lines(self):
@@ -203,12 +217,12 @@ class StockPicking(models.Model):
                 read_point=read_point,
                 biz_location=read_point,
                 biz_transactions=self._openepcis_biz_transactions(),
-                event_identifier=self._openepcis_event_id(cbv.PACKING, epcs, quantities),
             )
             self.env["openepcis.event"].queue(
                 document([event]),
                 "%s / %s" % (self.name, package.name),
                 self.company_id,
+                idem_key=self._openepcis_idem_key(cbv.PACKING, epcs, quantities),
                 source=self,
             )
 
@@ -235,16 +249,27 @@ class StockPicking(models.Model):
         return ""
 
     def _openepcis_event_time(self):
-        """When it happened, said in UTC.
+        """When it happened, said in UTC — or nothing at all.
 
         Odoo keeps datetimes naive and in UTC; EPCIS wants an instant and an
         offset. Marking it UTC rather than converting to the user's zone is the
         honest reading: the transfer was completed at that instant, and whose
         clock was on the wall is a separate question.
+
+        Only ``date_done``. The two fallbacks that used to stand behind it are
+        both gone, and for different reasons. ``scheduled_date`` is a planned
+        time, not an observed one — reporting it as the moment of the movement
+        is a false statement even when it happens to be close. And the clock at
+        reporting time is worse: the event time goes into the canonical event
+        hash, which is the event's identity, so a made-up time puts a different
+        identity on every retry of the same movement.
+
+        In practice ``date_done`` is always set here — the hook only runs for a
+        transfer that reached ``done``, and Odoo stamps it in ``_action_done``.
+        Returning nothing is the honest answer for the case that is left.
         """
         self.ensure_one()
-        moment = self.date_done or self.scheduled_date or fields.Datetime.now()
-        return moment.replace(tzinfo=timezone.utc)
+        return self.date_done.replace(tzinfo=timezone.utc) if self.date_done else None
 
     def _openepcis_biz_transactions(self):
         """The paperwork this movement belongs to, as something followable.
@@ -309,15 +334,22 @@ class StockPicking(models.Model):
         partner = self.partner_id
         return partner and partner.openepcis_gln or ""
 
-    def _openepcis_event_id(self, biz_step, epcs, quantities):
-        """An identifier derived from what this event states.
+    def _openepcis_idem_key(self, biz_step, epcs, quantities):
+        """This database's own handle on a movement it has already reported.
 
-        The database, the transfer and the business step make it *this* event;
-        the identifiers make it this content. Nothing here changes between two
-        reports of the same movement, which is the point: the second report
-        carries the identifier of the first.
+        The database, the transfer and the business step make it *this*
+        movement; the identifiers make it this content. Nothing here changes
+        between two reports of the same movement, which is the point: the
+        second report finds the first row and adds nothing.
+
+        This used to be the event's ``eventID``. It is not any more — the
+        eventID is the canonical CBV hash, which the repository computes — and
+        the two had to be separated for two reasons. An ErrorDeclaration
+        repeats the eventID of the event it corrects, so the eventID cannot
+        carry a uniqueness constraint; and this key deliberately contains the
+        database UUID, which has no business being in an event's identity.
         """
         self.ensure_one()
         database = self.env["ir.config_parameter"].sudo().get_param("database.uuid") or "odoo"
         content = sorted(epcs) + sorted(element["epcClass"] for element in quantities)
-        return event_id(database, self.name, biz_step, *content)
+        return idempotency_key(database, self.name, biz_step, *content)
