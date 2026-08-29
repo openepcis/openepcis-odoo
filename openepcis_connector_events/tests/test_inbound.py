@@ -2,7 +2,11 @@
 """The inbox: what comes back in, and what it is allowed to do here.
 
 The rule these tests exist to hold is the one that is easiest to erode later:
-a partner's event is shown, never posted. Nothing in here may move stock.
+out of the box, a partner's event is shown and nothing else. Posting exists,
+but it has to be switched on deliberately in two places — see
+``test_inbound_posting.py``, which is where that ladder and the invariant
+underneath it are held. Everything here runs on the default settings, so a
+change that made posting happen by itself would break these tests first.
 """
 
 from .common import TEST_PARTNER_GLN, EventCase
@@ -108,7 +112,7 @@ class TestInbox(EventCase):
             "the lot's chatter is where somebody will actually see it",
         )
 
-    def test_nothing_that_comes_in_moves_stock(self):
+    def test_nothing_that_comes_in_moves_stock_unless_somebody_said_so(self):
         product = self._published_product(tracking="lot")
         lot = self._lot("LOT-952-2", product)
         before = sum(self.env["stock.quant"].search([("lot_id", "=", lot.id)]).mapped("quantity"))
@@ -118,4 +122,4 @@ class TestInbox(EventCase):
         self._poll()
 
         after = sum(self.env["stock.quant"].search([("lot_id", "=", lot.id)]).mapped("quantity"))
-        self.assertEqual(before, after, "an observation is not a document")
+        self.assertEqual(before, after, "an observation is not a document by default")

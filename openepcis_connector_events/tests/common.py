@@ -174,6 +174,39 @@ class EventCase(LotCase):
         picking.button_validate()
         return picking
 
+    def _open_transfer(self, picking_type, product, quantity=3, lot=None, partner=None):
+        """A transfer that is reserved and waiting — the only kind an event may advance."""
+        picking = self.env["stock.picking"].create(
+            {
+                "picking_type_id": picking_type.id,
+                "location_id": picking_type.default_location_src_id.id
+                or self.supplier_location.id,
+                "location_dest_id": picking_type.default_location_dest_id.id
+                or self.customer_location.id,
+                "partner_id": partner and partner.id,
+                "move_ids": [
+                    (
+                        0,
+                        0,
+                        {
+                            "name": product.name,
+                            "product_id": product.id,
+                            "product_uom_qty": quantity,
+                            "product_uom": product.uom_id.id,
+                        },
+                    )
+                ],
+            }
+        )
+        picking.action_confirm()
+        picking.action_assign()
+        for line in picking.move_line_ids:
+            line.quantity = quantity
+            if lot is not None:
+                line.lot_id = lot.id
+        picking.move_ids.picked = True
+        return picking
+
     def _incoming_type(self):
         picking_type = self.warehouse.in_type_id
         picking_type.use_create_lots = True

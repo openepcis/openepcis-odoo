@@ -93,6 +93,31 @@ class StockPickingType(models.Model):
         "another event changes it, which is what makes it worth stating.",
     )
 
+    openepcis_inbound_policy = fields.Selection(
+        [
+            ("ignore", "Ignore"),
+            ("show", "Show only"),
+            ("propose", "Propose a posting"),
+            ("post", "Post automatically"),
+        ],
+        string="Incoming events",
+        default="show",
+        required=True,
+        help="What an event from somebody else may do to an operation of this "
+        "type. Showing is the default, so an installation that sets nothing "
+        "keeps the behaviour it had. Whatever is chosen here, an incoming "
+        "event can only ever move a transfer that is already open and "
+        "expected: none of these settings creates a document or stock.",
+    )
+    openepcis_inbound_observe = fields.Boolean(
+        string="Observe only",
+        default=True,
+        help="While this is set, a policy of 'post automatically' records what "
+        "it would have posted and posts nothing. It is the honest way into "
+        "somebody else's bookkeeping: watch for a while, read the log, then "
+        "clear this.",
+    )
+
     @api.depends("code", "sequence_code")
     def _compute_openepcis_defaults(self):
         """Seed from the operation's own codes, and never overwrite a choice."""

@@ -34,6 +34,35 @@ class ResCompany(models.Model):
         "and only has to make sure it never repeats one.",
     )
 
+    openepcis_inbound_scope = fields.Selection(
+        [
+            ("all", "Everything the repository shows us"),
+            ("own_gcp", "Only identifiers issued under our own prefix"),
+            ("known", "Only what we can place in this database"),
+        ],
+        string="Which events to keep",
+        default="all",
+        required=True,
+        help="A repository shared with partners hands out everything the "
+        "credential may see, which in a busy chain is mostly other people's "
+        "business. Narrowing costs nothing to change later: the watermark is "
+        "the same either way, so a wider setting simply starts filling the "
+        "inbox from the next run onwards.",
+    )
+    openepcis_inbound_batch = fields.Integer(
+        string="Events per run",
+        default=200,
+        help="How many events one scheduled run asks for at a time.",
+    )
+    openepcis_inbound_pages = fields.Integer(
+        string="Pages per run",
+        default=20,
+        help="How far one run will follow the repository's paging. This is the "
+        "brake on catching up: a run that has been down for a day would "
+        "otherwise walk a day of events in one transaction. What it does not "
+        "reach stays behind the watermark and is fetched next run.",
+    )
+
     openepcis_events_since = fields.Char(
         string="Events read up to",
         readonly=True,

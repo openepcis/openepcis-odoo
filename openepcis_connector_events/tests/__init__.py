@@ -2,3 +2,4 @@
 from . import test_sscc
 from . import test_events
 from . import test_inbound
+from . import test_inbound_posting
