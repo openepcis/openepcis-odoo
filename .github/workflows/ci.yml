@@ -84,6 +84,13 @@ jobs:
         with:
           path: addons/openepcis-odoo
 
+      # The events addon declares epcis-event-hash-generator as an external
+      # dependency (it recognises our own events coming back by their canonical
+      # hash). Without it Odoo lists the addon as uninstallable and every test
+      # in it is silently skipped rather than failed — the worst of both.
+      - name: Install the canonical hash generator
+        run: pip3 install --no-cache-dir --break-system-packages "epcis-event-hash-generator==1.9.3"
+
       - name: Install and run the test suite
         run: |
           odoo -d ci \
