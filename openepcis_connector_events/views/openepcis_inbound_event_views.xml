@@ -8,13 +8,17 @@
       <list string="Events received" create="false" edit="false"
             decoration-muted="state == 'ignored'"
             decoration-info="state == 'unmatched'"
-            decoration-danger="state == 'failed'">
+            decoration-danger="state == 'failed'"
+            decoration-warning="state == 'proposed'"
+            decoration-success="state == 'booked'">
         <field name="event_time"/>
         <field name="party_gln" string="Reported by"/>
         <field name="biz_step"/>
         <field name="disposition" optional="show"/>
         <field name="epc_ref" string="Identifier"/>
         <field name="state"/>
+        <field name="posting_note" optional="show"/>
+        <field name="observed_only" optional="hide"/>
         <field name="record_time" optional="hide"/>
         <field name="event_uuid" optional="hide"/>
         <field name="company_id" groups="base.group_multi_company" optional="hide"/>
@@ -28,7 +32,7 @@
     <field name="arch" type="xml">
       <form string="Event received" create="false" edit="false">
         <header>
-          <field name="state" widget="statusbar" statusbar_visible="received,matched,posted"/>
+          <field name="state" widget="statusbar" statusbar_visible="received,matched,posted,proposed,booked"/>
         </header>
         <sheet>
           <group>

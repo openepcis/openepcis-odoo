@@ -48,6 +48,53 @@
           </setting>
         </block>
 
+        <block title="Incoming events" name="openepcis_inbound">
+          <setting string="What we read back"
+                   help="The repository holds more than our own events: it is where a chain meets. Reading it back is how Odoo learns what happened to a pallet after it left the yard.">
+
+            <div class="content-group" invisible="not openepcis_events_enabled">
+              <div class="row mt8">
+                <label for="openepcis_inbound_scope" class="col-lg-4 o_light_label"/>
+                <field name="openepcis_inbound_scope"/>
+              </div>
+
+              <div class="text-muted mt8">
+                Narrowing is a convenience, not a permission — the repository already
+                decides what this credential may see at all. It only decides how much
+                of that ends up in the inbox.
+              </div>
+
+              <div class="row mt16">
+                <label for="openepcis_inbound_minutes" class="col-lg-4 o_light_label"/>
+                <field name="openepcis_inbound_minutes"/>
+              </div>
+
+              <div class="row mt8">
+                <label for="openepcis_inbound_batch" class="col-lg-4 o_light_label"/>
+                <field name="openepcis_inbound_batch"/>
+              </div>
+
+              <div class="row mt8">
+                <label for="openepcis_inbound_pages" class="col-lg-4 o_light_label"/>
+                <field name="openepcis_inbound_pages"/>
+              </div>
+
+              <div class="text-muted mt8">
+                The two limits bound a single run, not the total. Whatever a run does
+                not reach stays behind the watermark and is read next time, so a
+                connector that has been off for a day catches up in steps instead of
+                in one long transaction.
+              </div>
+
+              <div class="text-muted mt16">
+                Whether an incoming event may <em>post</em> anything is not set here:
+                it is set per operation type, and allowed per partner. Both have to
+                agree, and neither can make an event create a document or stock.
+              </div>
+            </div>
+          </setting>
+        </block>
+
       </xpath>
     </field>
   </record>

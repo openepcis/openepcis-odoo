@@ -28,9 +28,7 @@ class TestWhatIsReported(EventCase):
         self._transfer(self._incoming_type(), product, quantity=1, lot_name="952-0007")
 
         event = self._event()
-        self.assertEqual(
-            event["epcList"], ["https://id.gs1.org/01/%s/21/952-0007" % TEST_GTIN]
-        )
+        self.assertEqual(event["epcList"], ["https://id.gs1.org/01/%s/21/952-0007" % TEST_GTIN])
         self.assertNotIn("quantityList", event)
 
     def test_a_lot_is_a_class_and_lands_in_the_quantity_list(self):
@@ -80,9 +78,7 @@ class TestWhereItHappened(EventCase):
         product = self._published_product(tracking="none")
         self._transfer(self._incoming_type(), product)
 
-        self.assertEqual(
-            self._read_point(), "https://id.gs1.org/414/%s" % TEST_GLN
-        )
+        self.assertEqual(self._read_point(), "https://id.gs1.org/414/%s" % TEST_GLN)
 
     def test_a_sub_location_inherits_the_gln_above_it(self):
         shelf = self.env["stock.location"].create(
@@ -116,9 +112,7 @@ class TestPaperwork(EventCase):
         )
         product = self._published_product(tracking="none")
         product.product_tmpl_id.is_storable = True
-        self.env["stock.quant"]._update_available_quantity(
-            product, self.warehouse.lot_stock_id, 10
-        )
+        self.env["stock.quant"]._update_available_quantity(product, self.warehouse.lot_stock_id, 10)
         picking = self._transfer(self._outgoing_type(), product)
 
         import json
@@ -137,10 +131,8 @@ class TestPaperwork(EventCase):
         # Odoo 18 lets a consumable carry a lot but not a quant: only a
         # storable product has stock to take out of a warehouse.
         product.product_tmpl_id.is_storable = True
-        self.env["stock.quant"]._update_available_quantity(
-            product, self.warehouse.lot_stock_id, 10
-        )
-        picking = self._transfer(self._outgoing_type(), product, partner=partner)
+        self.env["stock.quant"]._update_available_quantity(product, self.warehouse.lot_stock_id, 10)
+        self._transfer(self._outgoing_type(), product, partner=partner)
 
         import json
 
@@ -226,9 +218,7 @@ class TestDelivery(EventCase):
         self.assertIn("not a URI", event.error)
 
     def test_the_same_movement_reported_twice_is_one_event(self):
-        picking = self._transfer(
-            self._incoming_type(), self._published_product(tracking="none")
-        )
+        picking = self._transfer(self._incoming_type(), self._published_product(tracking="none"))
         picking._openepcis_report()
 
         self.assertEqual(len(self._queued()), 1)

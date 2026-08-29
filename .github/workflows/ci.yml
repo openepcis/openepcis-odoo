@@ -87,11 +87,11 @@ jobs:
       - name: Install and run the test suite
         run: |
           odoo -d ci \
-            -i openepcis_connector,openepcis_connector_stock,openepcis_connector_product_expiry \
+            -i openepcis_connector,openepcis_connector_stock,openepcis_connector_product_expiry,openepcis_connector_events \
             --addons-path=/usr/lib/python3/dist-packages/odoo/addons,${GITHUB_WORKSPACE}/addons/openepcis-odoo \
             --db_host=db --db_user=odoo --db_password=odoo \
             --data-dir=/tmp/odoo-data \
-            --test-enable --test-tags /openepcis_connector,/openepcis_connector_stock,/openepcis_connector_product_expiry \
+            --test-enable --test-tags /openepcis_connector,/openepcis_connector_stock,/openepcis_connector_product_expiry,/openepcis_connector_events \
             --stop-after-init --log-level=test 2>&1 | tee odoo.log
 
       - name: Fail on any failed test

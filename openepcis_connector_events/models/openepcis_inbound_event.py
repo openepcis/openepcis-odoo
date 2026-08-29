@@ -28,7 +28,7 @@ from ..vendored import BenelogError
 
 logger = logging.getLogger(__name__)
 
-#: Events per scheduled run.
+#: Events per scheduled run, when a company states no preference of its own.
 BATCH = 200
 
 #: Pages the catch-up will walk in one run. A repository that keeps handing out
@@ -74,6 +74,8 @@ class OpenepcisInboundEvent(models.Model):
             ("received", "Received"),
             ("matched", "Matched"),
             ("posted", "Shown"),
+            ("proposed", "Waiting for confirmation"),
+            ("booked", "Posted"),
             ("unmatched", "Unknown identifier"),
             ("ignored", "Our own"),
             ("failed", "Failed"),
@@ -109,37 +111,51 @@ class OpenepcisInboundEvent(models.Model):
             try:
                 query = client.with_company(company)._epcis_query(company)
             except Exception as error:  # a misconfigured company must not stop the rest
-                logger.warning("OpenEPCIS inbox: no query service for %s (%s)", company.display_name, error)
+                logger.warning(
+                    "OpenEPCIS inbox: no query service for %s (%s)", company.display_name, error
+                )
                 continue
             self._poll_company(company, query)
 
     @api.model
     def _poll_company(self, company, query):
-        since = company.sudo().openepcis_events_since
+        settings = company.sudo()
+        since = settings.openepcis_events_since
         watermark = self._watermark(since)
+        batch = settings.openepcis_inbound_batch or BATCH
+        pages = settings.openepcis_inbound_pages or PAGES
         newest = None
         seen = 0
+        kept = 0
         try:
-            for event in query.since(watermark, per_page=100, pages=PAGES):
-                if seen >= BATCH:
+            for event in query.since(watermark, per_page=100, pages=pages):
+                if seen >= batch:
                     break
                 seen += 1
+                recorded_first = event.get("recordTime")
+                if recorded_first and (newest is None or recorded_first > newest):
+                    newest = recorded_first
+                if not self._in_scope(company, event):
+                    # Out of scope still moves the watermark: it was read and
+                    # judged, and asking for it again next run would only make
+                    # the same judgement more slowly.
+                    continue
+                kept += 1
                 row = self._receive(company, event)
-                recorded = event.get("recordTime")
-                if recorded and (newest is None or recorded > newest):
-                    newest = recorded
                 if row and row.state == "received":
                     row._resolve()
         except BenelogError as error:
             # A repository that cannot be read is not an empty repository. Leave
             # the watermark where it is; the next run asks for the same window.
-            logger.warning("OpenEPCIS inbox: %s could not be read (%s)", company.display_name, error)
+            logger.warning(
+                "OpenEPCIS inbox: %s could not be read (%s)", company.display_name, error
+            )
             return
         if newest:
             # Only after the run got through. A watermark advanced before the
             # work skips whatever the failure swallowed.
             company.sudo().openepcis_events_since = newest
-        logger.info("OpenEPCIS inbox: %s read %s events", company.display_name, seen)
+        logger.info("OpenEPCIS inbox: %s read %s events, kept %s", company.display_name, seen, kept)
 
     @staticmethod
     def _watermark(since):
@@ -160,11 +176,88 @@ class OpenepcisInboundEvent(models.Model):
             parsed = datetime.fromisoformat(since.replace("Z", "+00:00"))
         except ValueError:
             return ""
-        return (parsed - timedelta(minutes=5)).astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        return (
+            (parsed - timedelta(minutes=5))
+            .astimezone(timezone.utc)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
 
     # ------------------------------------------------------------------
     # Receiving
     # ------------------------------------------------------------------
+
+    @api.model
+    def _in_scope(self, company, event):
+        """Whether this event is any of our business.
+
+        A repository shared along a chain hands out whatever the credential may
+        see, and in a busy chain that is mostly other people's goods. Filtering
+        happens here rather than in the query because the repository matches
+        identifiers whole: there is no prefix search to ask for "everything
+        under our prefix", and a wildcard is not an identifier. Reading a row
+        and dropping it is cheap; the expensive part — resolving it, telling
+        somebody about it — is what this skips.
+        """
+        scope = company.sudo().openepcis_inbound_scope or "all"
+        if scope == "all":
+            return True
+        identifier = self._first_identifier(event)
+        parts = self._parse_identifier(identifier)
+        if not parts:
+            # Nothing we can read is nothing we can place, and a narrowed scope
+            # is a request not to be shown that.
+            return False
+        kind, key, _qualifier = parts
+        if scope == "own_gcp":
+            prefix = (company.sudo().openepcis_gcp or "").strip()
+            if not prefix:
+                # Asked to narrow to our own prefix without stating one. Keeping
+                # everything would quietly ignore the setting; keeping nothing
+                # would quietly empty the inbox. Keep everything and say so.
+                logger.warning(
+                    "OpenEPCIS inbox: %s narrows to its own prefix but has none set",
+                    company.display_name,
+                )
+                return True
+            return self._bears_prefix(kind, key, prefix)
+        return bool(self.sudo()._subject_of(kind, key, _qualifier))
+
+    @staticmethod
+    def _bears_prefix(kind, key, prefix):
+        """Whether a GS1 key was issued under this company prefix.
+
+        Where the prefix begins depends on the key, and getting that wrong
+        silently empties an inbox rather than raising anything — so both forms
+        are tried rather than one assumed. A GTIN-14 carries an indicator digit
+        in front, a GTIN-13 does not, and Digital Links are minted both ways in
+        the wild. An SSCC always has its extension digit in front.
+        """
+        digits = "".join(c for c in str(key) if c.isdigit())
+        if kind == "gtin":
+            return digits.startswith(prefix) or digits[1:].startswith(prefix)
+        if kind == "sscc":
+            return digits[1:].startswith(prefix)
+        return False
+
+    def _subject_of(self, kind, key, qualifier):
+        """Resolve an identifier without a row — used before one is created."""
+        if kind == "sscc":
+            return (
+                self.env["stock.quant.package"]
+                .sudo()
+                .search([("openepcis_sscc", "=", key)], limit=1)
+                or None
+            )
+        product = self.env["product.product"].sudo().search([("barcode", "=", key)], limit=1)
+        if not product or not qualifier:
+            return product or None
+        return (
+            self.env["stock.lot"]
+            .sudo()
+            .search([("product_id", "=", product.id), ("name", "=", qualifier)], limit=1)
+            or None
+        )
 
     @api.model
     def _receive(self, company, event):
@@ -219,6 +312,9 @@ class OpenepcisInboundEvent(models.Model):
             return
         self.sudo().write({"state": "matched", "res_model": record._name, "res_id": record.id})
         self._tell(record)
+        # Showing comes first and always happens; posting is the exception that
+        # has to argue for itself, and it argues after the fact is on record.
+        self._consider_posting(record)
 
     def _find_subject(self):
         """The lot or package an identifier belongs to, if this database has one.
@@ -233,17 +329,7 @@ class OpenepcisInboundEvent(models.Model):
         parts = self._parse_identifier(self.epc_ref)
         if not parts:
             return None
-        kind, key, qualifier = parts
-        if kind == "sscc":
-            return self.env["stock.quant.package"].sudo().search(
-                [("openepcis_sscc", "=", key)], limit=1
-            ) or None
-        product = self.env["product.product"].sudo().search([("barcode", "=", key)], limit=1)
-        if not product or not qualifier:
-            return product or None
-        return self.env["stock.lot"].sudo().search(
-            [("product_id", "=", product.id), ("name", "=", qualifier)], limit=1
-        ) or None
+        return self._subject_of(*parts)
 
     @staticmethod
     def _parse_identifier(identifier):
@@ -326,6 +412,8 @@ class OpenepcisInboundEvent(models.Model):
 
     @api.model
     def _companies(self):
-        return self.env["res.company"].sudo().search(
-            [("openepcis_events_enabled", "=", True), ("openepcis_epcis_url", "!=", False)]
+        return (
+            self.env["res.company"]
+            .sudo()
+            .search([("openepcis_events_enabled", "=", True), ("openepcis_epcis_url", "!=", False)])
         )

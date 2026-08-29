@@ -12,7 +12,6 @@ configuration that points at the operation type. This looks there.
 """
 
 from odoo import models
-
 from odoo.addons.openepcis_connector_events.vendored import cbv
 
 
@@ -29,6 +28,4 @@ class StockPickingType(models.Model):
         self.ensure_one()
         if not self.id:
             return False
-        return bool(
-            self.env["pos.config"].sudo().search_count([("picking_type_id", "=", self.id)])
-        )
+        return bool(self.env["pos.config"].sudo().search_count([("picking_type_id", "=", self.id)]))

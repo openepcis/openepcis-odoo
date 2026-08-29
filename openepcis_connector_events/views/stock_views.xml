@@ -26,6 +26,16 @@
           <field name="openepcis_capture"/>
           <field name="openepcis_biz_step" invisible="not openepcis_capture"/>
           <field name="openepcis_disposition" invisible="not openepcis_capture"/>
+          <field name="openepcis_inbound_policy"/>
+          <field name="openepcis_inbound_observe"
+                 invisible="openepcis_inbound_policy != 'post'"/>
+          <div colspan="2" class="text-muted"
+               invisible="openepcis_inbound_policy in ('ignore', 'show')">
+            A partner still cannot post by himself: he also has to be allowed to,
+            on his own contact record. And whatever is set here, an event can only
+            validate a transfer that is already reserved and waiting for exactly
+            this confirmation — it never creates a transfer, and never creates stock.
+          </div>
         </group>
       </xpath>
     </field>

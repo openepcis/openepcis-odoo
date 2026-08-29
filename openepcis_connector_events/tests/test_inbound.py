@@ -2,7 +2,11 @@
 """The inbox: what comes back in, and what it is allowed to do here.
 
 The rule these tests exist to hold is the one that is easiest to erode later:
-a partner's event is shown, never posted. Nothing in here may move stock.
+out of the box, a partner's event is shown and nothing else. Posting exists,
+but it has to be switched on deliberately in two places — see
+``test_inbound_posting.py``, which is where that ladder and the invariant
+underneath it are held. Everything here runs on the default settings, so a
+change that made posting happen by itself would break these tests first.
 """
 
 from .common import TEST_PARTNER_GLN, EventCase
@@ -20,9 +24,7 @@ def event(uuid, biz_step="receiving", epc=None, recorded="2026-08-27T22:13:29.00
         "epcList": [epc] if epc else [],
     }
     if party:
-        body["sourceList"] = [
-            {"type": "https://ref.gs1.org/cbv/SDT-owning_party", "source": party}
-        ]
+        body["sourceList"] = [{"type": "https://ref.gs1.org/cbv/SDT-owning_party", "source": party}]
     return body
 
 
@@ -44,9 +46,7 @@ class TestInbox(EventCase):
     def test_the_watermark_walks_forward_and_is_read_back_a_little(self):
         self.query.pages = [[event("urn:uuid:1", recorded="2026-08-27T22:13:29.000Z")]]
         self._poll()
-        self.assertEqual(
-            self.company.openepcis_events_since, "2026-08-27T22:13:29.000Z"
-        )
+        self.assertEqual(self.company.openepcis_events_since, "2026-08-27T22:13:29.000Z")
         self.query.pages = [[]]
         self._poll()
         # 22:13:29 less the five-minute overlap.
@@ -67,14 +67,18 @@ class TestInbox(EventCase):
         )
 
     def test_our_own_event_coming_back_is_recognised_and_not_retold(self):
-        transfer = self.env["openepcis.event"].sudo().create(
-            {
-                "name": "ours",
-                "company_id": self.company.id,
-                "event_uuid": "urn:uuid:ours",
-                "event_time": "2026-08-27 22:13:00",
-                "payload": "{}",
-            }
+        transfer = (
+            self.env["openepcis.event"]
+            .sudo()
+            .create(
+                {
+                    "name": "ours",
+                    "company_id": self.company.id,
+                    "event_uuid": "urn:uuid:ours",
+                    "event_time": "2026-08-27 22:13:00",
+                    "payload": "{}",
+                }
+            )
         )
         self.assertTrue(transfer)
         self.query.pages = [[event("urn:uuid:ours")]]
@@ -82,9 +86,7 @@ class TestInbox(EventCase):
         self.assertEqual(self._rows().state, "ignored")
 
     def test_an_identifier_this_database_does_not_know_stays_visible(self):
-        self.query.pages = [
-            [event("urn:uuid:2", epc="https://id.gs1.org/01/09521234999999/21/9")]
-        ]
+        self.query.pages = [[event("urn:uuid:2", epc="https://id.gs1.org/01/09521234999999/21/9")]]
         self._poll()
         row = self._rows()
         self.assertEqual(row.state, "unmatched")
@@ -108,7 +110,7 @@ class TestInbox(EventCase):
             "the lot's chatter is where somebody will actually see it",
         )
 
-    def test_nothing_that_comes_in_moves_stock(self):
+    def test_nothing_that_comes_in_moves_stock_unless_somebody_said_so(self):
         product = self._published_product(tracking="lot")
         lot = self._lot("LOT-952-2", product)
         before = sum(self.env["stock.quant"].search([("lot_id", "=", lot.id)]).mapped("quantity"))
@@ -118,4 +120,4 @@ class TestInbox(EventCase):
         self._poll()
 
         after = sum(self.env["stock.quant"].search([("lot_id", "=", lot.id)]).mapped("quantity"))
-        self.assertEqual(before, after, "an observation is not a document")
+        self.assertEqual(before, after, "an observation is not a document by default")
