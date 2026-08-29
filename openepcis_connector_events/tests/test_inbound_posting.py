@@ -68,7 +68,10 @@ class TestInboundPosting(EventCase):
         )
         return picking_type, picking
 
-    def _hear(self, uuid="urn:uuid:p1", biz_step="shipping", party=TEST_PARTNER_GLN):
+    # "receiving" and not "shipping": these are deliveries of ours, and the step
+    # that attests one completed is the partner's receipt. His despatch note says
+    # the goods left him, which ATTESTING_STEPS deliberately does not accept.
+    def _hear(self, uuid="urn:uuid:p1", biz_step="receiving", party=TEST_PARTNER_GLN):
         self.query.pages = [[event(uuid, biz_step=biz_step, epc=self.identifier, party=party)]]
         self.env["openepcis.inbound.event"]._cron_poll()
         return self.env["openepcis.inbound.event"].search([("event_uuid", "=", uuid)])
@@ -146,7 +149,7 @@ class TestInboundPosting(EventCase):
         row = self._hear(biz_step="inspecting")
 
         self.assertEqual(picking.state, "assigned")
-        self.assertIn("does not mean the goods moved", row.posting_note or "")
+        self.assertIn("does not attest", row.posting_note or "")
 
     def test_a_transfer_without_a_partner_is_never_posted(self):
         picking_type, picking = self._waiting_delivery(partner=False)
