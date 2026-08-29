@@ -36,11 +36,16 @@ COPY --chown=odoo:odoo openepcis_connector_events_pos /mnt/extra-addons/openepci
 #
 # --break-system-packages because the official image is Debian and Odoo's own
 # Python packages live in the system interpreter; a venv here would be a second
-# interpreter that Odoo does not use. The package brings PyLD, frozendict,
-# cachetools and Flask, the last without a single import in its own code. That
-# was weighed: one implementation of the canonicalisation rules beats a second,
-# leaner one that disagrees with the first.
+# interpreter that Odoo does not use.
+#
+# --no-deps, and not out of tidiness: the package declares Flask, Flask wants a
+# newer Werkzeug, and pip cannot uninstall the Debian-packaged Werkzeug that
+# Odoo itself runs on ("Cannot uninstall Werkzeug 3.0.1, RECORD file not
+# found"). Replacing Odoo's Werkzeug to satisfy a dependency that the package
+# never imports would trade a working web server for nothing. What it does
+# import is pyld and dateutil; both are installed here with their own chains.
 USER root
-RUN pip3 install --no-cache-dir --break-system-packages \
+RUN pip3 install --no-cache-dir --break-system-packages PyLD python-dateutil \
+    && pip3 install --no-cache-dir --break-system-packages --no-deps \
         "epcis-event-hash-generator==1.9.3"
 USER odoo
