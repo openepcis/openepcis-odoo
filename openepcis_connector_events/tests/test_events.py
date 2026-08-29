@@ -263,6 +263,43 @@ class TestDelivery(EventCase):
 
         self.assertEqual(len(self._queued()), 1)
 
+    def test_the_document_leaves_without_an_event_id(self):
+        """One canonicalisation, and it is the repository's.
+
+        Two implementations of the hash exist and they do not agree on every
+        event shape. Sending an identifier we computed would put our answer
+        into somebody else's repository permanently; leaving the field empty
+        lets the side that stores the event name it.
+        """
+        import json
+
+        self._transfer(self._incoming_type(), self._published_product(tracking="none"))
+        row = self._queued()
+        event = json.loads(row.payload)["epcisBody"]["eventList"][0]
+
+        self.assertNotIn("eventID", event)
+        # …but the row knows what to expect, for recognising the echo later.
+        self.assertTrue(row.event_hash.startswith("ni:///sha-256;"))
+        self.assertTrue(row.idem_key.startswith("urn:uuid:"))
+
+    def test_an_event_the_repository_already_holds_counts_as_captured(self):
+        """A duplicate is the answer we were hoping for, not a failure.
+
+        It means the first attempt landed after all. Booking it as refused
+        would leave the queue full of rows that look broken and are not.
+        """
+        from odoo.addons.openepcis_connector.vendor.benelog_client.core.errors import (
+            BenelogError,
+        )
+
+        self._transfer(self._incoming_type(), self._published_product(tracking="none"))
+        self.capture.error_to_raise = BenelogError("Duplicate EPCIS Event", status=400)
+
+        self._deliver()
+
+        self.assertEqual(self._queued().state, "captured")
+        self.assertFalse(self._queued().error)
+
 
 @tagged("post_install", "-at_install")
 class TestAggregation(EventCase):

@@ -14,9 +14,20 @@ for events that were thrown away minutes later. So a row carries its capture
 job and is asked again on the next run, and only then does it say what really
 happened.
 
-The event identifier is derived from the facts, not drawn — see the library's
-``event_id``. Re-reporting the same movement produces the same identifier, and
-the unique index below means the same movement cannot even be queued twice.
+Two identifiers are in play and they answer different questions. The
+``idem_key`` is this database's own handle on a movement it has reported — a
+UUIDv5 over the transfer, the business step and the identifiers, and the unique
+index below, so the same movement cannot be queued twice. The ``event_hash`` is
+what the event is *called*: the canonical CBV hash the repository computes over
+the event itself.
+
+We do not send that hash. The document leaves here without an ``eventID`` and
+the repository fills it in, because there must be exactly one canonicalisation
+and it is the one that stores the event. The hash computed here is a
+*comparison* value only, for recognising our own events when they come back
+through the inbox: if the two implementations ever disagree the worst that
+happens is a missed echo — an event of ours shown as news — where a sent
+identifier would have been wrong and permanent.
 """
 
 import json
@@ -26,7 +37,7 @@ from datetime import datetime, timezone
 from odoo import _, api, fields, models
 from odoo.exceptions import UserError
 
-from ..vendored import BenelogError
+from ..vendored import BenelogError, stamp_event_ids
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +51,18 @@ BATCH = 100
 #: queue that keeps asking turns one unanswerable delivery into a permanent
 #: background load.
 SETTLE_ATTEMPTS = 5
+
+
+#: What the repository answers when it already holds an event
+#: (EPCISEventValidationService: "Duplicate EPCIS Event"). Matched on the
+#: phrase because the answer is a 400 like any other validation refusal — the
+#: status alone cannot tell the two apart.
+DUPLICATE_MARKERS = ("duplicate epcis event", "duplicate event")
+
+
+def _is_duplicate(error):
+    text = str(error).lower()
+    return any(marker in text for marker in DUPLICATE_MARKERS)
 
 
 def _naive_utc(moment):
@@ -60,13 +83,22 @@ class OpenepcisEvent(models.Model):
 
     name = fields.Char(required=True, readonly=True, index=True)
     company_id = fields.Many2one("res.company", required=True, readonly=True, index=True)
-    event_uuid = fields.Char(
-        string="Event ID",
+    idem_key = fields.Char(
+        string="Idempotency key",
         required=True,
         readonly=True,
         index=True,
-        help="Derived from what the event states, so the same movement reported "
-        "twice carries the same identifier and the repository recognises it.",
+        help="This database's handle on the movement, derived from the transfer, "
+        "the business step and the identifiers — so the same movement cannot be "
+        "queued twice. Not the event's identifier.",
+    )
+    event_hash = fields.Char(
+        string="Expected event ID",
+        readonly=True,
+        index=True,
+        help="The canonical CBV hash of this event, computed here for comparison "
+        "only: it is how an event of ours is recognised when the inbox reads it "
+        "back. The document is sent without an eventID; the repository assigns it.",
     )
     event_time = fields.Datetime(required=True, readonly=True, index=True)
     biz_step = fields.Char(string="Business step", readonly=True)
@@ -95,8 +127,8 @@ class OpenepcisEvent(models.Model):
 
     _sql_constraints = [
         (
-            "event_uuid_unique",
-            "unique(company_id, event_uuid)",
+            "idem_key_unique",
+            "unique(company_id, idem_key)",
             "This movement has already been reported.",
         ),
     ]
@@ -106,7 +138,7 @@ class OpenepcisEvent(models.Model):
     # ------------------------------------------------------------------
 
     @api.model
-    def queue(self, epcis_document, subject, company, source=None):
+    def queue(self, epcis_document, subject, company, idem_key, source=None):
         """Put one document in the outbox, or leave the existing row alone.
 
         Returns the row, existing or new. A movement that is already queued is
@@ -117,9 +149,8 @@ class OpenepcisEvent(models.Model):
         if not events:
             return self.browse()
         event = events[0]
-        uuid = event.get("eventID")
         existing = self.sudo().search(
-            [("company_id", "=", company.id), ("event_uuid", "=", uuid)], limit=1
+            [("company_id", "=", company.id), ("idem_key", "=", idem_key)], limit=1
         )
         if existing:
             return existing
@@ -127,7 +158,8 @@ class OpenepcisEvent(models.Model):
             {
                 "name": subject,
                 "company_id": company.id,
-                "event_uuid": uuid,
+                "idem_key": idem_key,
+                "event_hash": self._expected_event_id(epcis_document),
                 "event_time": _naive_utc(event["eventTime"]),
                 "biz_step": event.get("bizStep"),
                 "epc_count": len(event.get("epcList") or [])
@@ -138,6 +170,22 @@ class OpenepcisEvent(models.Model):
                 "res_id": source and source.id,
             }
         )
+
+    @api.model
+    def _expected_event_id(self, epcis_document):
+        """What the repository will call this event, as far as we can tell.
+
+        Comparison only — see the module docstring. A failure here is not a
+        reason to refuse a transfer: without the value the inbox merely fails
+        to recognise one of our own events later, which shows as news rather
+        than as silence.
+        """
+        try:
+            stamped = stamp_event_ids(epcis_document)
+            return stamped["epcisBody"]["eventList"][0].get("eventID") or False
+        except Exception:  # noqa: BLE001 — an identifier we only compare with
+            logger.warning("OpenEPCIS: could not compute the expected event id", exc_info=True)
+            return False
 
     # ------------------------------------------------------------------
     # Delivery
@@ -166,6 +214,21 @@ class OpenepcisEvent(models.Model):
         try:
             receipt = capture.submit(json.loads(self.payload))
         except BenelogError as error:
+            if _is_duplicate(error):
+                # The repository already holds this event. That is not a
+                # failure, it is the answer we were hoping for: the retry
+                # arrived at a repository that had taken the first attempt
+                # after all. Booking it as refused would leave the queue full
+                # of rows that look broken and are not.
+                self.sudo().write(
+                    {
+                        "state": "captured",
+                        "error": False,
+                        "attempts": self.attempts + 1,
+                    }
+                )
+                logger.info("OpenEPCIS event %s: the repository already holds it", self.name)
+                return
             # Refused outright: nothing was stored, and the row stays for the
             # next run. The message is the repository's own — a validation
             # failure names a field, and paraphrasing loses the field.

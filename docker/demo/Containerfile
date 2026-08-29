@@ -29,3 +29,18 @@ COPY --chown=odoo:odoo openepcis_connector_stock /mnt/extra-addons/openepcis_con
 COPY --chown=odoo:odoo openepcis_connector_product_expiry /mnt/extra-addons/openepcis_connector_product_expiry
 COPY --chown=odoo:odoo openepcis_connector_events /mnt/extra-addons/openepcis_connector_events
 COPY --chown=odoo:odoo openepcis_connector_events_pos /mnt/extra-addons/openepcis_connector_events_pos
+
+# The canonical CBV event hash. The events addon declares it as an
+# external_dependency, so without it Odoo lists the addon as uninstallable —
+# which is the honest failure, but not a useful image.
+#
+# --break-system-packages because the official image is Debian and Odoo's own
+# Python packages live in the system interpreter; a venv here would be a second
+# interpreter that Odoo does not use. The package brings PyLD, frozendict,
+# cachetools and Flask, the last without a single import in its own code. That
+# was weighed: one implementation of the canonicalisation rules beats a second,
+# leaner one that disagrees with the first.
+USER root
+RUN pip3 install --no-cache-dir --break-system-packages \
+        "epcis-event-hash-generator==1.9.3"
+USER odoo

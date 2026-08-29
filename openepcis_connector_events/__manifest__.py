@@ -21,11 +21,16 @@ outbox: validating a transfer never waits for the network.
     "author": "benelog GmbH & Co. KG",
     "website": "https://openepcis.io",
     "category": "Inventory/Inventory",
-    "version": "18.0.1.0.0",
+    "version": "18.0.1.1.0",
     "license": "LGPL-3",
     "depends": [
         "openepcis_connector_stock",
     ],
+    # The canonical CBV event hash. Used here for one thing — recognising an
+    # event of ours when the inbox reads it back — and declared so Odoo refuses
+    # to install the addon without it, rather than failing at the first
+    # transfer. See openepcis_event.py on why the hash is compared and not sent.
+    "external_dependencies": {"python": ["epcis_event_hash_generator"]},
     "data": [
         "security/ir.model.access.csv",
         "data/ir_sequence_data.xml",

@@ -38,7 +38,7 @@ from ..vendored import (
     biz_transaction,
     cbv,
     document,
-    event_id,
+    idempotency_key,
     instance_uri,
     object_event,
     party,
@@ -145,10 +145,13 @@ class StockPicking(models.Model):
             biz_transactions=self._openepcis_biz_transactions(),
             source_list=self._openepcis_source_list(),
             destination_list=self._openepcis_destination_list(),
-            event_identifier=self._openepcis_event_id(biz_step, epcs, quantities),
         )
         self.env["openepcis.event"].queue(
-            document([event]), self.name, self.company_id, source=self
+            document([event]),
+            self.name,
+            self.company_id,
+            idem_key=self._openepcis_idem_key(biz_step, epcs, quantities),
+            source=self,
         )
 
     def _openepcis_lines(self):
@@ -214,12 +217,12 @@ class StockPicking(models.Model):
                 read_point=read_point,
                 biz_location=read_point,
                 biz_transactions=self._openepcis_biz_transactions(),
-                event_identifier=self._openepcis_event_id(cbv.PACKING, epcs, quantities),
             )
             self.env["openepcis.event"].queue(
                 document([event]),
                 "%s / %s" % (self.name, package.name),
                 self.company_id,
+                idem_key=self._openepcis_idem_key(cbv.PACKING, epcs, quantities),
                 source=self,
             )
 
@@ -331,15 +334,22 @@ class StockPicking(models.Model):
         partner = self.partner_id
         return partner and partner.openepcis_gln or ""
 
-    def _openepcis_event_id(self, biz_step, epcs, quantities):
-        """An identifier derived from what this event states.
+    def _openepcis_idem_key(self, biz_step, epcs, quantities):
+        """This database's own handle on a movement it has already reported.
 
-        The database, the transfer and the business step make it *this* event;
-        the identifiers make it this content. Nothing here changes between two
-        reports of the same movement, which is the point: the second report
-        carries the identifier of the first.
+        The database, the transfer and the business step make it *this*
+        movement; the identifiers make it this content. Nothing here changes
+        between two reports of the same movement, which is the point: the
+        second report finds the first row and adds nothing.
+
+        This used to be the event's ``eventID``. It is not any more — the
+        eventID is the canonical CBV hash, which the repository computes — and
+        the two had to be separated for two reasons. An ErrorDeclaration
+        repeats the eventID of the event it corrects, so the eventID cannot
+        carry a uniqueness constraint; and this key deliberately contains the
+        database UUID, which has no business being in an event's identity.
         """
         self.ensure_one()
         database = self.env["ir.config_parameter"].sudo().get_param("database.uuid") or "odoo"
         content = sorted(epcs) + sorted(element["epcClass"] for element in quantities)
-        return event_id(database, self.name, biz_step, *content)
+        return idempotency_key(database, self.name, biz_step, *content)

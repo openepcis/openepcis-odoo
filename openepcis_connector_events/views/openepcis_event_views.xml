@@ -15,7 +15,8 @@
         <field name="epc_count" string="IDs"/>
         <field name="state"/>
         <field name="error" optional="show"/>
-        <field name="event_uuid" optional="hide"/>
+        <field name="event_hash" optional="hide"/>
+        <field name="idem_key" optional="hide"/>
         <field name="job" optional="hide"/>
         <field name="company_id" groups="base.group_multi_company" optional="hide"/>
         <button name="action_retry" type="object" string="Send again" icon="fa-repeat"
@@ -48,7 +49,8 @@
               <field name="epc_count"/>
             </group>
             <group>
-              <field name="event_uuid"/>
+              <field name="event_hash"/>
+              <field name="idem_key"/>
               <field name="job"/>
               <field name="attempts"/>
               <field name="error" invisible="not error"/>
@@ -71,7 +73,7 @@
     <field name="arch" type="xml">
       <search>
         <field name="name"/>
-        <field name="event_uuid"/>
+        <field name="event_hash"/>
         <field name="biz_step"/>
         <filter name="pending" string="Not yet captured"
                 domain="[('state', 'in', ('queued', 'accepted', 'failed'))]"/>

@@ -21,10 +21,11 @@ from odoo.addons.openepcis_connector.vendor.benelog_client.events import (  # no
     biz_transaction,
     cbv,
     document,
-    event_id,
+    idempotency_key,
     instance_uri,
     object_event,
     party,
     quantity_element,
     sscc_uri,
+    stamp_event_ids,
 )

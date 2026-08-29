@@ -293,14 +293,21 @@ class OpenepcisInboundEvent(models.Model):
     def _is_our_own(self, company, uuid):
         """Whether we sent this event ourselves.
 
-        The outbox derives its event ids the same way the repository keeps them,
-        so our own events come back verbatim. Telling the story twice — once as
-        a transfer, once as news from outside — would be worse than useless.
+        A repository hands back what it holds, our own events included, and
+        telling the story twice — once as a transfer, once as news from outside
+        — would be worse than useless.
+
+        Matched against the hash the outbox computed for comparison, not
+        against an identifier we sent: the document leaves here without an
+        eventID and the repository assigns one. If the two canonicalisations
+        ever disagree this recognises nothing, and the event shows up as news.
+        That is the failure worth having; the other direction would have been a
+        wrong identifier in somebody else's repository.
         """
         return bool(
             self.env["openepcis.event"]
             .sudo()
-            .search_count([("company_id", "=", company.id), ("event_uuid", "=", uuid)])
+            .search_count([("company_id", "=", company.id), ("event_hash", "=", uuid)])
         )
 
     def _resolve(self):
