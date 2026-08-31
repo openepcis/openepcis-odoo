@@ -93,6 +93,57 @@ class TestInbox(EventCase):
         self._poll()
         self.assertEqual(self._rows().state, "ignored")
 
+    def test_a_fourteen_digit_gtin_finds_a_product_labelled_with_thirteen(self):
+        """The spelling a real sender uses has to resolve.
+
+        A Digital Link writes AI 01 with fourteen digits; the barcode on the
+        product is the thirteen-digit EAN. Matched exactly, the two never meet
+        and the row lands as "unknown identifier" — including for events this
+        database sent itself.
+        """
+        product = self._published_product(tracking="lot")
+        lot = self._lot("LOT-952-2", product)
+        self.assertEqual(len(product.barcode), 13)
+
+        for spelling in ("0" + product.barcode, product.barcode):
+            with self.subTest(spelling=spelling):
+                self.env["openepcis.inbound.event"].search([]).unlink()
+                self.query.pages = [
+                    [
+                        event(
+                            "urn:uuid:%s" % spelling,
+                            epc="https://id.gs1.org/01/%s/10/%s" % (spelling, lot.name),
+                            party=TEST_PARTNER_GLN,
+                        )
+                    ]
+                ]
+                self._poll()
+                row = self._rows()
+                self.assertEqual(row.res_model, "stock.lot")
+                self.assertEqual(row.res_id, lot.id)
+
+    def test_an_indicator_digit_is_not_padding_and_resolves_to_nothing(self):
+        """A leading one names a logistic unit of the item, not the item.
+
+        Stripping it would resolve an event to the wrong product, which is worse
+        than resolving it to none.
+        """
+        product = self._published_product(tracking="lot")
+        self._lot("LOT-952-3", product)
+        self.query.pages = [
+            [
+                event(
+                    "urn:uuid:indicator",
+                    epc="https://id.gs1.org/01/1%s/10/LOT-952-3" % product.barcode,
+                    party=TEST_PARTNER_GLN,
+                )
+            ]
+        ]
+
+        self._poll()
+
+        self.assertEqual(self._rows().state, "unmatched")
+
     def test_an_identifier_this_database_does_not_know_stays_visible(self):
         self.query.pages = [[event("urn:uuid:2", epc="https://id.gs1.org/01/09521234999999/21/9")]]
         self._poll()
@@ -103,7 +154,11 @@ class TestInbox(EventCase):
     def test_an_event_about_one_of_our_lots_finds_it_and_says_so_there(self):
         product = self._published_product(tracking="lot")
         lot = self._lot("LOT-952-1", product)
-        identifier = "https://id.gs1.org/01/%s/10/%s" % (product.barcode, lot.name)
+        # Fourteen digits, the way a Digital Link spells AI 01 — not the
+        # thirteen the barcode field holds. Building this out of
+        # product.barcode, as this test used to, asks the inbox to resolve a
+        # spelling no real sender produces.
+        identifier = "https://id.gs1.org/01/0%s/10/%s" % (product.barcode, lot.name)
         self.query.pages = [[event("urn:uuid:3", epc=identifier, party=TEST_PARTNER_GLN)]]
 
         self._poll()

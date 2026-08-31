@@ -240,6 +240,32 @@ class OpenepcisInboundEvent(models.Model):
             return digits[1:].startswith(prefix)
         return False
 
+    @staticmethod
+    def _gtin_spellings(key):
+        """The same GTIN in every length a barcode field might hold it.
+
+        A Digital Link writes AI 01 with fourteen digits; a product's barcode is
+        usually the thirteen-digit EAN. Matching the two exactly finds nothing,
+        and the row lands as "unknown identifier" — including for events this
+        database sent itself. The prefix check a few lines up already knew this
+        ("a GTIN-14 carries an indicator digit in front, a GTIN-13 does not");
+        the resolution did not, and that inconsistency is the bug.
+
+        Only leading **zeros** are added or removed. A leading one is an
+        indicator digit and names a different trade item — a logistic unit of
+        them, not the item — so stripping it would resolve an event to the wrong
+        product, which is worse than resolving it to none.
+        """
+        digits = str(key).strip()
+        if not digits.isdigit():
+            return [digits]
+        bare = digits.lstrip("0") or "0"
+        spellings = {digits}
+        for length in (8, 12, 13, 14):
+            if len(bare) <= length:
+                spellings.add(bare.zfill(length))
+        return sorted(spellings)
+
     def _subject_of(self, kind, key, qualifier):
         """Resolve an identifier without a row — used before one is created."""
         if kind == "sscc":
@@ -249,7 +275,11 @@ class OpenepcisInboundEvent(models.Model):
                 .search([("openepcis_sscc", "=", key)], limit=1)
                 or None
             )
-        product = self.env["product.product"].sudo().search([("barcode", "=", key)], limit=1)
+        product = (
+            self.env["product.product"]
+            .sudo()
+            .search([("barcode", "in", self._gtin_spellings(key))], limit=1)
+        )
         if not product or not qualifier:
             return product or None
         return (
