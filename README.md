@@ -277,6 +277,9 @@ docker compose run --rm odoo odoo -d test \
 
 # Lint and formatting, as CI runs them
 ruff check . && ruff format --check .
+
+# Does this branch agree with itself about which Odoo release it targets?
+python tools/check-release-idioms.py
 ```
 
 Odoo exits 0 even when tests fail, so the summary line in the log is the source of
@@ -328,6 +331,12 @@ uncreated — two contacts sharing one GLN, the same movement twice in the outbo
 nothing but a startup warning to say so. Anything moved between the branches has to be
 checked for this. The other direction is harmless: 18 does not know `models.Constraint`
 and says so at once.
+
+Because only one of the two directions fails loudly, CI checks it rather than trusting
+a reviewer to notice. `tools/check-release-idioms.py` reads the target release from the
+addon manifests and refuses the old form on 19 and the new one on 18. It checks two more
+things a port gets wrong quietly: manifests that disagree with each other about the
+release, and a container tag still pointing at the other one.
 
 Installing the wrong branch cannot happen quietly either. Odoo 18 refuses a manifest
 version of `19.0.x` outright, before it loads any Python.

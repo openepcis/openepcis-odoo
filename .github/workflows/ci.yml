@@ -33,6 +33,21 @@ jobs:
           version: "0.16.2"  # guarded against pyproject.toml by ruff itself
           args: format --check --diff
 
+  release-idioms:
+    # One branch per Odoo release, and the differences between them are few
+    # enough to check mechanically. This is not a nicety: on Odoo 19 the old
+    # _sql_constraints form is accepted, warned about once and then ignored, so
+    # a constraint that was meant to exist simply does not. Nothing fails, no
+    # test can miss it, and the damage — two parties on one GLN, one movement
+    # reported twice — surfaces in production. Seconds, and no database.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python tools/check-release-idioms.py
+
   gs1-helpers:
     # The GS1 arithmetic is pure Python. Running it without a database means a
     # broken check digit is reported in seconds rather than after a full install.
