@@ -9,3 +9,4 @@ __pycache__/
 odoo-data/
 postgres-data/
 *.log
+.odoo-src-cache/
