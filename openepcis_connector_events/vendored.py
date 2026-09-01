@@ -29,4 +29,5 @@ from odoo.addons.openepcis_connector.vendor.benelog_client.events import (  # no
     quantity_element,
     sscc_uri,
     stamp_event_ids,
+    transaction_event,
 )

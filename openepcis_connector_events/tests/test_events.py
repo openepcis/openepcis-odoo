@@ -338,6 +338,120 @@ class TestDelivery(EventCase):
 
 
 @tagged("post_install", "-at_install")
+class TestReturns(EventCase):
+    """What a return says about the shipment the goods went out on."""
+
+    def _delivery(self, product, partner):
+        self.env["stock.quant"]._update_available_quantity(
+            product, self.warehouse.lot_stock_id, 5
+        )
+        return self._transfer(self._outgoing_type(), product, quantity=2, partner=partner)
+
+    def _return_of(self, delivery):
+        """The return Odoo's own wizard would build."""
+        picking = self.env["stock.picking"].create(
+            {
+                "picking_type_id": self._incoming_type().id,
+                "location_id": self.customer_location.id,
+                "location_dest_id": self.warehouse.lot_stock_id.id,
+                "partner_id": delivery.partner_id.id,
+                "origin": "Return of %s" % delivery.name,
+                "return_id": delivery.id,
+                "move_ids": [
+                    (
+                        0,
+                        0,
+                        {
+                            "name": move.product_id.name,
+                            "product_id": move.product_id.id,
+                            "product_uom_qty": 2,
+                            "product_uom": move.product_uom.id,
+                        },
+                    )
+                    for move in delivery.move_ids
+                ],
+            }
+        )
+        picking.action_confirm()
+        picking.action_assign()
+        for line in picking.move_line_ids:
+            line.quantity = 2
+        picking.move_ids.picked = True
+        picking.button_validate()
+        return picking
+
+    def _events_of_type(self, kind):
+        import json
+
+        return [
+            event
+            for row in self._queued()
+            for event in json.loads(row.payload)["epcisBody"]["eventList"]
+            if event["type"] == kind
+        ]
+
+    def test_returned_goods_leave_the_shipment_they_went_out_on(self):
+        """A receipt says they arrived, not that they left the despatch advice.
+
+        The association is a standing statement: until something withdraws it,
+        the shipment answers with goods that have long since come back.
+        """
+        partner = self.env["res.partner"].create(
+            {"name": "A customer", "openepcis_gln": TEST_PARTNER_GLN}
+        )
+        product = self._published_product(tracking="none")
+        product.product_tmpl_id.is_storable = True
+        delivery = self._delivery(product, partner)
+        shipped_under = self._events_of_type("ObjectEvent")[0]["bizTransactionList"]
+        self._queued().sudo().unlink()
+
+        self._return_of(delivery)
+
+        releases = self._events_of_type("TransactionEvent")
+        self.assertEqual(len(releases), 1)
+        self.assertEqual(releases[0]["action"], "DELETE")
+        self.assertEqual(releases[0]["disposition"], "returned")
+        # The very document the goods went out under, not the return's own.
+        self.assertEqual(releases[0]["bizTransactionList"], shipped_under)
+
+    def test_the_arrival_is_still_reported_as_its_own_event(self):
+        """Two different statements, and the return makes both."""
+        partner = self.env["res.partner"].create(
+            {"name": "A customer", "openepcis_gln": TEST_PARTNER_GLN}
+        )
+        product = self._published_product(tracking="none")
+        product.product_tmpl_id.is_storable = True
+        delivery = self._delivery(product, partner)
+        self._queued().sudo().unlink()
+
+        self._return_of(delivery)
+
+        self.assertEqual(len(self._events_of_type("ObjectEvent")), 1)
+        self.assertEqual(len(self._events_of_type("TransactionEvent")), 1)
+
+    def test_an_ordinary_receipt_releases_nothing(self):
+        """Only a return releases. A receipt is not a return of anything."""
+        product = self._published_product(tracking="none")
+        self._transfer(self._incoming_type(), product)
+
+        self.assertEqual(self._events_of_type("TransactionEvent"), [])
+
+    def test_a_return_of_paperless_goods_releases_nothing(self):
+        """An internal transfer names no document, so there is nothing to leave."""
+        product = self._published_product(tracking="none")
+        product.product_tmpl_id.is_storable = True
+        self.env["stock.quant"]._update_available_quantity(
+            product, self.warehouse.lot_stock_id, 5
+        )
+        internal = self._transfer(self._internal_type(), product, quantity=1)
+        self._queued().sudo().unlink()
+
+        self._return_of(internal)
+
+        self.assertEqual(self._events_of_type("TransactionEvent"), [])
+
+
+@tagged("post_install", "-at_install")
 class TestAggregation(EventCase):
     def test_packing_into_a_unit_says_what_is_underneath_it(self):
         product = self._published_product(tracking="serial")

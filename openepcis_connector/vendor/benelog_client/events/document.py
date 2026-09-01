@@ -340,6 +340,69 @@ def aggregation_event(
     return event
 
 
+def transaction_event(
+    *,
+    action: str,
+    event_time: datetime,
+    biz_transactions: Sequence[tuple[str, str]],
+    biz_step: str | None = None,
+    disposition: str | None = None,
+    epcs: Sequence[str] = (),
+    quantities: Sequence[Mapping[str, Any]] = (),
+    parent_id: str | None = None,
+    read_point: str | None = None,
+    biz_location: str | None = None,
+    source_list: Sequence[tuple[str, str]] = (),
+    destination_list: Sequence[tuple[str, str]] = (),
+    event_identifier: str | None = None,
+    error_declaration: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """A TransactionEvent: these goods now belong to that paperwork, or no longer do.
+
+    The distinction from an ObjectEvent is worth being precise about, because
+    both can name a business transaction and only one of them is *about* it. An
+    ObjectEvent says what happened to the goods and mentions the paperwork in
+    passing; a TransactionEvent says that the relationship between the two
+    changed. ``ADD`` associates, ``DELETE`` disassociates, ``OBSERVE`` confirms
+    an association that already held.
+
+    The association is a standing statement, like an aggregation: once made, it
+    answers questions until something withdraws it. That is what makes
+    ``DELETE`` the interesting half — goods returned against a despatch advice
+    are no longer part of that shipment, and nobody downstream can work that
+    out from a receipt alone.
+
+    ``biz_transactions`` is required and may name more than one document: goods
+    can be committed to an order and a despatch advice at the same time.
+    """
+    if not biz_transactions:
+        raise ValueError(
+            "a TransactionEvent has to name the business transaction it is about; "
+            "an event that associates goods with nothing is an ObjectEvent"
+        )
+    event: dict[str, Any] = {"type": "TransactionEvent"}
+    if event_identifier:
+        event["eventID"] = event_identifier
+    event["eventTime"] = _instant(event_time)
+    event["eventTimeZoneOffset"] = _offset(event_time)
+    if parent_id:
+        event["parentID"] = parent_id
+    event["action"] = action
+    if biz_step:
+        event["bizStep"] = biz_step
+    if disposition:
+        event["disposition"] = disposition
+    if epcs:
+        event["epcList"] = list(epcs)
+    if quantities:
+        event["quantityList"] = [dict(element) for element in quantities]
+    _place(event, read_point, biz_location)
+    _paperwork(event, biz_transactions, source_list, destination_list)
+    if error_declaration:
+        event["errorDeclaration"] = dict(error_declaration)
+    return event
+
+
 def document(
     events: Iterable[Mapping[str, Any]], creation_time: datetime | None = None
 ) -> dict[str, Any]:

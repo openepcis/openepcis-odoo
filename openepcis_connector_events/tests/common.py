@@ -214,6 +214,10 @@ class EventCase(LotCase):
         picking_type.use_existing_lots = True
         return picking_type
 
+    def _internal_type(self):
+        """A move within the warehouse — it belongs to no document."""
+        return self.warehouse.int_type_id
+
     def _queued(self):
         return self.env["openepcis.event"].search([])
 

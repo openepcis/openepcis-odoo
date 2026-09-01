@@ -43,6 +43,7 @@ from ..vendored import (
     object_event,
     party,
     quantity_element,
+    transaction_event,
 )
 
 logger = logging.getLogger(__name__)
@@ -114,6 +115,7 @@ class StockPicking(models.Model):
                 continue
             picking._openepcis_queue_aggregations(read_point)
             picking._openepcis_queue_movement(read_point)
+            picking._openepcis_queue_return_release(read_point)
 
     def _openepcis_armed(self):
         self.ensure_one()
@@ -270,6 +272,70 @@ class StockPicking(models.Model):
                 ),
                 source=self,
             )
+
+    # ------------------------------------------------------------------
+    # Paperwork the goods no longer belong to
+    # ------------------------------------------------------------------
+
+    def _openepcis_queue_return_release(self, read_point):
+        """Goods coming back stop belonging to the shipment they went out on.
+
+        The one place a TransactionEvent says something the movement cannot.
+        Every event this connector sends already names the paperwork it belongs
+        to, so associating goods with an order needs no event of its own — it
+        is on the ObjectEvent already, and repeating it as a TransactionEvent
+        ADD would state the same fact twice.
+
+        Ending an association is different. It is a standing statement, like an
+        aggregation: until something withdraws it, a despatch advice answers
+        with goods that have long since come back. A receipt alone does not
+        withdraw it — it says the goods arrived somewhere, not that they left a
+        shipment — and nobody downstream can work the second out from the
+        first.
+
+        Only a return, and only against the transaction the original transfer
+        named. A return of something that named no paperwork releases nothing.
+        """
+        self.ensure_one()
+        original = self._openepcis_returned_from()
+        if not original:
+            return
+        released = original._openepcis_biz_transactions()
+        if not released:
+            return
+        epcs, quantities = self._openepcis_identifiers(self._openepcis_lines())
+        if not epcs and not quantities:
+            return
+        event = transaction_event(
+            action=cbv.DELETE,
+            event_time=self._openepcis_event_time(),
+            biz_transactions=released,
+            biz_step=cbv.RECEIVING,
+            disposition=cbv.RETURNED,
+            epcs=epcs,
+            quantities=quantities,
+            read_point=read_point,
+            biz_location=read_point,
+        )
+        self.env["openepcis.event"].queue(
+            document([event]),
+            _("%(name)s (released from %(original)s)", name=self.name, original=original.name),
+            self.company_id,
+            idem_key=self._openepcis_idem_key("release", epcs, quantities, original.name),
+            source=self,
+        )
+
+    def _openepcis_returned_from(self):
+        """The transfer this one sends goods back on, if it is a return.
+
+        ``return_id`` only exists from Odoo 17 on, and this addon reads it the
+        way it reads ``purchase_id``: by asking whether the field is there,
+        rather than by depending on a module for one attribute.
+        """
+        self.ensure_one()
+        if "return_id" not in self._fields:
+            return self.browse()
+        return self.return_id
 
     # ------------------------------------------------------------------
     # Where, when, under which paperwork
