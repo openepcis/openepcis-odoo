@@ -199,11 +199,17 @@ class TestInboundPosting(EventCase):
         picking_type, picking = self._waiting_delivery()
         self._arm(picking_type)
 
-        row = self._hear()
-        row.sudo().write({"event_type": "TransformationEvent"})
-        row.sudo()._consider_posting(row.res_model and self.env[row.res_model].browse(row.res_id))
+        # A transformation wearing the very step that would otherwise post.
+        body = event("urn:uuid:t", biz_step="receiving", epc=self.identifier)
+        body["type"] = "TransformationEvent"
+        body["outputEPCList"] = ["https://id.gs1.org/01/04012345123456/21/THEIRS"]
+        self.query.pages = [[body]]
+        self.env["openepcis.inbound.event"]._cron_poll()
 
+        row = self.env["openepcis.inbound.event"].search([("event_uuid", "=", "urn:uuid:t")])
+        self.assertEqual(row.event_type, "TransformationEvent")
         self.assertEqual(picking.state, "assigned")
+        self.assertIn("TransformationEvent", row.posting_note or "")
 
     # -- the invariant --------------------------------------------------
 
