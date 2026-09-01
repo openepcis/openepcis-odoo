@@ -280,6 +280,9 @@ ruff check . && ruff format --check .
 
 # Does this branch agree with itself about which Odoo release it targets?
 python tools/check-release-idioms.py
+
+# What would have to be adapted to run this code on another Odoo release?
+python tools/check-release-api.py 20
 ```
 
 Odoo exits 0 even when tests fail, so the summary line in the log is the source of
@@ -347,6 +350,19 @@ blocking after that.
 Which branch the counterpart is, is not written in the workflow: CI asks
 `tools/check-release-idioms.py --other`, which derives it from the manifests. A workflow
 that named the other release would itself be one more difference between the branches.
+
+Before a port there is `tools/check-release-api.py`, which answers what a release would
+break without an Odoo, a database or the right processor architecture — it reads the
+target release's own source. It resolves every model these addons extend, validates every
+view against that release's RelaxNG files, and checks every inheritance anchor against the
+real core view. Run against the release the other branch targets it lists what that branch
+has already adapted; run against a release nobody has ported to yet, it is the work ahead.
+The port to 19.0 cost three CI rounds, and this tool finds all three in one local run.
+
+What it does not answer is whether individual *fields* still exist — the break that cost
+51 tests was `stock.move.name`. A model's fields come from the whole inheritance graph
+across every installed module, which is a question for a running Odoo; the port check
+answers it by installing and running the suite.
 
 Changes land on `18.0` and reach `19.0` by **merging**, not by applying the same commit
 to both. The direction is one-way, which is why a pull request to `19.0` has no port
