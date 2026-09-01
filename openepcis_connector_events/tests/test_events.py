@@ -437,7 +437,7 @@ class TestAggregation(EventCase):
         picking.button_validate()
         return picking
 
-    def test_taking_goods_out_of_a_unit_says_so(self):
+    def test_picking_goods_off_a_pallet_says_the_unit_lost_them(self):
         """An aggregation is a standing statement, so it has to be withdrawn.
 
         Scan the SSCC and the repository answers what is underneath it. A unit
@@ -450,8 +450,36 @@ class TestAggregation(EventCase):
         package = self.env["stock.quant.package"].create({})
         self._stocked_serial(product, "952-0200", package)
 
-        # Out of the pallet and onto the shelf: the goods leave the unit.
-        picking = self._transfer(self._outgoing_type(), product, quantity=1)
+        picking = self.env["stock.picking"].create(
+            {
+                "picking_type_id": self._outgoing_type().id,
+                "location_id": self.warehouse.lot_stock_id.id,
+                "location_dest_id": self.customer_location.id,
+                "move_ids": [
+                    (
+                        0,
+                        0,
+                        {
+                            "name": product.name,
+                            "product_id": product.id,
+                            "product_uom_qty": 1,
+                            "product_uom": product.uom_id.id,
+                        },
+                    )
+                ],
+            }
+        )
+        picking.action_confirm()
+        picking.action_assign()
+        # Off the pallet and into the van: the goods come out of the unit and
+        # go into none. That is what a picker does, and what the move line
+        # says afterwards.
+        for line in picking.move_line_ids:
+            line.quantity = 1
+            line.package_id = package
+            line.result_package_id = False
+        picking.move_ids.picked = True
+        picking.button_validate()
 
         aggregations = self._aggregations()
         self.assertEqual(len(aggregations), 1, [e.get("bizStep") for e in aggregations])
@@ -460,7 +488,40 @@ class TestAggregation(EventCase):
         self.assertEqual(
             aggregations[0]["parentID"], "https://id.gs1.org/00/%s" % package.openepcis_sscc
         )
-        self.assertTrue(picking.name)
+
+    def test_the_unpack_button_says_it_too(self):
+        """The everyday way of emptying a pallet leaves no transfer at all.
+
+        Odoo has two: picking goods off it in a delivery, which leaves move
+        lines, and this button, which clears the package on the quants and is
+        done. Reporting only the first would tell the repository about the
+        rarer of the two.
+        """
+        product = self._published_product(tracking="serial")
+        product.product_tmpl_id.is_storable = True
+        package = self.env["stock.quant.package"].create({})
+        self._stocked_serial(product, "952-0202", package)
+
+        package.unpack()
+
+        aggregations = self._aggregations()
+        self.assertEqual(len(aggregations), 1, [e.get("bizStep") for e in aggregations])
+        self.assertEqual(aggregations[0]["action"], "DELETE")
+        self.assertEqual(aggregations[0]["bizStep"], "unpacking")
+        self.assertEqual(
+            aggregations[0]["parentID"], "https://id.gs1.org/00/%s" % package.openepcis_sscc
+        )
+        self.assertEqual(
+            aggregations[0]["childEPCs"],
+            ["https://id.gs1.org/01/%s/21/952-0202" % TEST_GTIN_14],
+        )
+
+    def test_unpacking_an_empty_unit_says_nothing(self):
+        package = self.env["stock.quant.package"].create({})
+
+        package.unpack()
+
+        self.assertEqual(self._aggregations(), [])
 
     def test_a_unit_that_only_moves_is_neither_packed_nor_unpacked(self):
         """Reporting a move as a packing would restate what never changed."""

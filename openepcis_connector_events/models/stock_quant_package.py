@@ -13,12 +13,21 @@ label having to carry a list.
 """
 
 import logging
+from datetime import datetime, timezone
 
 from odoo import _, api, fields, models
 from odoo.exceptions import UserError, ValidationError
 
 from ..utils import sscc
-from ..vendored import sscc_uri
+from ..vendored import (
+    aggregation_event,
+    cbv,
+    document,
+    idempotency_key,
+    instance_uri,
+    quantity_element,
+    sscc_uri,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +112,102 @@ class StockQuantPackage(models.Model):
             raise UserError(str(error)) from error
         self.openepcis_sscc = number
         return number
+
+    def unpack(self):
+        """Taking the unit apart, from the package itself.
+
+        Odoo empties a unit in two very different ways, and only one of them
+        goes through a transfer. Picking goods off a pallet in a delivery
+        leaves move lines and reaches the hook on ``stock.picking``; pressing
+        Unpack here leaves none at all — it clears the package on the quants
+        and is done. Reporting only the first would tell the repository about
+        the rarer of the two and stay silent about the everyday one, and an
+        aggregation nobody withdraws keeps answering with goods that have been
+        on the shelf for weeks.
+
+        Read before the call, because afterwards the quants no longer name the
+        unit and there is nothing left to describe. Never raises: emptying a
+        pallet must not fail because a repository is unreachable, which is the
+        same rule the transfer hook follows.
+        """
+        contents = {package: package._openepcis_contents() for package in self}
+        result = super().unpack()
+        for package, (epcs, quantities) in contents.items():
+            try:
+                package._openepcis_report_unpacked(epcs, quantities)
+            except Exception:  # noqa: BLE001 — a report must never fail an unpack
+                logger.exception("OpenEPCIS: reporting the unpacking of %s failed", package.name)
+        return result
+
+    def _openepcis_contents(self):
+        """What this unit holds, as EPCs and quantity elements.
+
+        The same reading the transfer hook applies to its move lines, applied
+        to quants instead: a serial is an instance and belongs in the EPC list,
+        a lot is a class and belongs in the quantity list.
+        """
+        self.ensure_one()
+        epcs = []
+        merged = {}
+        for quant in self.quant_ids:
+            product = quant.product_id
+            gtin = product._openepcis_key()
+            if not gtin or not product.openepcis_publish:
+                continue
+            lot_name = quant.lot_id.name
+            if product.tracking == "serial" and lot_name:
+                epcs.append(instance_uri(gtin, serial=lot_name))
+                continue
+            epc_class = instance_uri(gtin, lot=lot_name) if lot_name else instance_uri(gtin)
+            uom = quant.product_uom_id.openepcis_rec20_code or ""
+            merged[(epc_class, uom)] = merged.get((epc_class, uom), 0) + quant.quantity
+        quantities = [
+            quantity_element(epc_class, quantity, uom or None)
+            for (epc_class, uom), quantity in merged.items()
+        ]
+        return epcs, quantities
+
+    def _openepcis_report_unpacked(self, epcs, quantities):
+        """Say that this unit no longer holds what it held."""
+        self.ensure_one()
+        if not epcs and not quantities:
+            return
+        company = self.company_id or self.env.company
+        if not self.openepcis_sscc or not self.env["openepcis.client"]._epcis_configured(company):
+            return
+        # The location knows how to answer this — its own GLN or the nearest
+        # one above it — and it is the same walk a transfer uses.
+        read_point = self.location_id._openepcis_read_point()
+        if not read_point:
+            logger.info(
+                "OpenEPCIS: %s was unpacked, but no location carries a GLN — nothing reported",
+                self.name,
+            )
+            return
+        moment = datetime.now(timezone.utc).replace(microsecond=0)
+        event = aggregation_event(
+            action=cbv.DELETE,
+            event_time=moment,
+            parent_id=self._openepcis_uri(),
+            biz_step=cbv.UNPACKING,
+            disposition=cbv.IN_PROGRESS,
+            child_epcs=epcs,
+            child_quantities=quantities,
+            read_point=read_point,
+            biz_location=read_point,
+        )
+        self.env["openepcis.event"].queue(
+            document([event]),
+            _("%s (unpacked)", self.name),
+            company,
+            idem_key=idempotency_key(
+                self.env["ir.config_parameter"].sudo().get_param("database.uuid") or "odoo",
+                "unpack",
+                self.openepcis_sscc,
+                moment.isoformat(),
+            ),
+            source=self,
+        )
 
     def _openepcis_uri(self):
         """The canonical URI of this unit, or an empty string if it has none."""
