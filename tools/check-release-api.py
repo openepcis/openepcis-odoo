@@ -29,8 +29,9 @@ fields means resolving the whole inheritance graph across every installed
 module, which is a job for a running Odoo rather than for a text search. The
 port check in CI answers that one by installing and running the suite.
 
-Sources are read from GitHub and cached under ``.odoo-src-cache``; a second run
-costs nothing. Exit status is 0 when the release holds no surprises.
+Sources are read from GitHub and cached under ``~/.cache/openepcis-odoo``,
+outside the working tree so that no linter ever sees them; a second run costs
+nothing. Exit status is 0 when the release holds no surprises.
 """
 
 import json
@@ -47,7 +48,15 @@ except ImportError:
     sys.exit("This needs lxml: pip install lxml")
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-CACHE = ROOT / ".odoo-src-cache"
+
+# Outside the working tree on purpose. Odoo's own sources under a checkout make
+# every linter and every editor index them, and one stray run then reports
+# hundreds of findings in code that is not ours.
+CACHE = (
+    pathlib.Path(os.environ.get("XDG_CACHE_HOME") or pathlib.Path.home() / ".cache")
+    / "openepcis-odoo"
+    / "odoo-src"
+)
 RAW = "https://raw.githubusercontent.com/odoo/odoo/%s/%s"
 API = "https://api.github.com/repos/odoo/odoo/contents/%s?ref=%s"
 
@@ -81,7 +90,7 @@ def get(url, binary=False):
     target = CACHE / re.sub(r"[^A-Za-z0-9._-]", "_", url)
     if target.exists():
         return target.read_bytes() if binary else target.read_text(encoding="utf-8")
-    CACHE.mkdir(exist_ok=True)
+    CACHE.mkdir(parents=True, exist_ok=True)
     request = urllib.request.Request(url, headers={"User-Agent": "openepcis-odoo"})
     token = os.environ.get("GITHUB_TOKEN")
     if token and url.startswith("https://api.github.com/"):
