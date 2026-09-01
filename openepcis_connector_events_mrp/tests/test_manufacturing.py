@@ -9,10 +9,20 @@ one.
 
 import json
 
-from odoo.addons.openepcis_connector_events.tests.common import TEST_GCP, TEST_GLN, EventCase
+from odoo.addons.openepcis_connector_events.tests.common import (
+    TEST_GCP,
+    TEST_GLN,
+    TEST_GTIN,
+    TEST_GTIN_2,
+    EventCase,
+)
 from odoo.tests import tagged
 
-TEST_GTIN_14 = "09520000000004"
+#: The two barcodes as AI 01 spells them. Written out rather than derived: a
+#: test that computes its expectation the way the code does agrees with the
+#: code whatever the code says.
+FLOUR_GTIN_14 = "0" + TEST_GTIN
+BREAD_GTIN_14 = "0" + TEST_GTIN_2
 
 
 @tagged("post_install", "-at_install")
@@ -20,8 +30,10 @@ class TestManufacturing(EventCase):
     def setUp(self):
         super().setUp()
         self.production_location = self.env.ref("stock.stock_location_stock")
+        # Two products, two barcodes: Odoo refuses a second product with a
+        # barcode another one already carries, and rightly so.
         self.flour = self._published_product(tracking="lot", name="Mehl Type 550")
-        self.bread = self._published_product(tracking="lot", name="Bauernbrot")
+        self.bread = self._published_product(tracking="lot", name="Bauernbrot", barcode=TEST_GTIN_2)
 
     def _published_product(self, tracking="lot", name=None, **values):
         product = super()._published_product(tracking=tracking, **values)
@@ -81,9 +93,15 @@ class TestManufacturing(EventCase):
         self.assertIn("outputQuantityList", event)
         self.assertTrue(
             event["inputQuantityList"][0]["epcClass"].startswith(
-                "https://id.gs1.org/01/%s" % TEST_GTIN_14
+                "https://id.gs1.org/01/%s" % FLOUR_GTIN_14
             ),
             event["inputQuantityList"],
+        )
+        self.assertTrue(
+            event["outputQuantityList"][0]["epcClass"].startswith(
+                "https://id.gs1.org/01/%s" % BREAD_GTIN_14
+            ),
+            event["outputQuantityList"],
         )
         self.assertEqual(event["readPoint"], {"id": "https://id.gs1.org/414/%s" % TEST_GLN})
 

@@ -8,7 +8,7 @@ tests are about is what was said, not that something was sent.
 
 from unittest.mock import patch
 
-from odoo.addons.openepcis_connector_stock.tests.common import TEST_GTIN, LotCase
+from odoo.addons.openepcis_connector_stock.tests.common import TEST_GTIN, TEST_GTIN_2, LotCase
 
 # The class that *defines* the method, not the one the model is named after:
 # Odoo merges both into one model, and a patch has to land where the
@@ -227,6 +227,7 @@ class EventCase(LotCase):
 
 __all__ = [
     "TEST_GTIN",
+    "TEST_GTIN_2",
     "TEST_GLN",
     "TEST_GLN_DOCK",
     "TEST_PARTNER_GLN",
