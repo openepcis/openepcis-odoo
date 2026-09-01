@@ -46,6 +46,12 @@ IMAGE_RE = re.compile(r"odoo:(\d+)")
 # The releases this repository keeps a branch for. The port check derives its
 # counterpart from this, so adding 20.0 later is one edit in one place.
 SUPPORTED = (18, 19)
+
+# Changes land here and reach the other branch by merging. The direction
+# matters: merging the follower back into the leader would carry that release's
+# own adaptations — its constraint form, its model names, its manifests — into a
+# branch they are wrong for. So the port check runs one way only.
+LEADS = 18
 VERSION_RE = re.compile(r'"version"\s*:\s*"(\d+)\.0\.')
 
 
@@ -134,6 +140,13 @@ def main():
             for problem in problems:
                 print("  %s" % problem, file=sys.stderr)
             return 1
+        if release != LEADS:
+            # Nothing to print, and CI skips the port check on an empty release.
+            # A change that belongs on both branches is made on the leading
+            # branch and merged here; one made here is specific to this release.
+            message = "This branch follows %d.0 — nothing to port-check onto." % LEADS
+            print(message, file=sys.stderr)
+            return 0
         print("release=%d" % other(release))
         print("branch=%d.0" % other(release))
         return 0
