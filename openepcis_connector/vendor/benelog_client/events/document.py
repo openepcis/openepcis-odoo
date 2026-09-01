@@ -49,6 +49,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime, timezone
 from typing import Any
 
+from ..core import gs1
 from . import cbv
 
 #: The GS1 namespace every identifier in an event is expressed in.
@@ -73,6 +74,9 @@ QUALIFIER_ORDER = ("22", "10", "21")
 def gtin14(gtin: str) -> str:
     """A GTIN in the 14-digit form a Digital Link requires.
 
+    One line, because the arithmetic belongs to the identifier and not to the
+    event: see :func:`benelog_client.core.gs1.gtin14`.
+
     AI 01 is fourteen digits — always, whatever length the barcode on the
     product happens to be. A GTIN-13 (the ordinary EAN), a GTIN-12 or a GTIN-8
     are the same identifier written shorter, and the Digital Link form is the
@@ -86,13 +90,10 @@ def gtin14(gtin: str) -> str:
     built the expected identifier out of the same barcode field, so they
     asserted whatever the code produced.
 
-    Anything that is not a plain digit string is left alone: it is not a GTIN,
-    and quietly reshaping it would be worse than passing it on.
+    Anything that is not a plain digit string comes back unpadded: it is not a
+    GTIN, and inventing digits in front of it would be worse than handing it on.
     """
-    digits = str(gtin).strip()
-    if not digits.isdigit() or len(digits) > 14:
-        return digits
-    return digits.zfill(14)
+    return gs1.gtin14(gtin)
 
 
 def instance_uri(gtin: str, lot: str | None = None, serial: str | None = None) -> str:

@@ -280,12 +280,14 @@ class StockPicking(models.Model):
         can say which order it belonged to without the asker having an ERP
         login.
 
-        A URL, not a document number: the schema demands a URI either way, and
-        of the two forms that satisfy it only one leads anywhere. The host also
-        states who issued the document, which the alternative has to encode as a
-        GLN to achieve. Where this database has no address of its own — the
-        default ``localhost`` — the GLN form is used instead, because a link to
-        somebody's laptop identifies nothing.
+        The CBV form ``urn:epcglobal:cbv:bt:<GLN>:<number>``, not a URL. The
+        schema takes either, and a URL is the more useful of the two — it can
+        be followed. But the reference is part of the canonical event hash, and
+        therefore part of the event's identity: a URL would carry this
+        deployment's address into it, so the same movement reported from a test
+        system and from production would have two different names. The GLN
+        carries what the host would otherwise have said, namely who issued the
+        document.
         """
         self.ensure_one()
         code = self.picking_type_id.code
@@ -298,11 +300,23 @@ class StockPicking(models.Model):
         return []
 
     def _openepcis_document_reference(self, fallback):
-        """This transfer's own address, or its number when it has none.
+        """The number of the document this movement belongs to.
 
         The source document is the better answer where there is one — a receipt
-        belongs to a purchase order, not to itself — and `purchase_id` only
+        belongs to a purchase order, not to itself — and ``purchase_id`` only
         exists when Purchase is installed, which this addon does not require.
+
+        The number, and deliberately not this database's URL for it, although a
+        URL is the more useful of the two forms the schema allows: it can be
+        followed, and its host says who issued the document. The reference goes
+        into the canonical event hash, and the hash is the event's identity.
+        With a URL in it, the identity would carry ``web.base.url`` — a move
+        from a test system to production would re-mint every identifier ever
+        issued, and the same movement would have two names depending on where
+        it was reported from. The CBV form names the same document without
+        saying where it is hosted; ``biz_transaction`` builds it from this
+        number and the GLN of the party that issued it, because order number
+        4711 is only unique alongside whoever wrote it.
         """
         self.ensure_one()
         record = self
@@ -310,10 +324,7 @@ class StockPicking(models.Model):
             if field in self._fields and self[field]:
                 record = self[field]
                 break
-        base = (record.get_base_url() or "").rstrip("/")
-        if not base or "localhost" in base or "127.0.0.1" in base:
-            return fallback or self.name
-        return "%s/odoo/%s/%s" % (base, record._name, record.id)
+        return record.display_name if record is not self else (fallback or self.name)
 
     def _openepcis_source_list(self):
         self.ensure_one()

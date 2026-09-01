@@ -11,7 +11,7 @@ from odoo import fields
 from odoo.exceptions import UserError
 from odoo.tests import tagged
 
-from .common import TEST_GTIN, LotCase
+from .common import TEST_GTIN_14, LotCase
 
 
 @tagged("post_install", "-at_install")
@@ -24,7 +24,7 @@ class TestQualifierPaths(LotCase):
 
         self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0]["method"], "PUT")
-        self.assertEqual(calls[0]["path"], "/products/%s/10/BATCH-952-A" % TEST_GTIN)
+        self.assertEqual(calls[0]["path"], "/products/%s/10/BATCH-952-A" % TEST_GTIN_14)
         self.assertEqual(lot.openepcis_state, "synced")
 
     def test_a_serial_publishes_to_the_serial_path(self):
@@ -33,7 +33,7 @@ class TestQualifierPaths(LotCase):
         lot.openepcis_publish = True
         lot._openepcis_sync()
 
-        self.assertEqual(calls[0]["path"], "/products/%s/21/952-0007" % TEST_GTIN)
+        self.assertEqual(calls[0]["path"], "/products/%s/21/952-0007" % TEST_GTIN_14)
 
     def test_an_untracked_product_falls_back_to_the_batch_path(self):
         # A lot on an untracked product exists because a person created one on
@@ -43,7 +43,7 @@ class TestQualifierPaths(LotCase):
         lot.openepcis_publish = True
         lot._openepcis_sync()
 
-        self.assertEqual(calls[0]["path"], "/products/%s/10/952-ODD" % TEST_GTIN)
+        self.assertEqual(calls[0]["path"], "/products/%s/10/952-ODD" % TEST_GTIN_14)
 
     def test_the_qualifier_value_is_rfc3986_encoded(self):
         # Lot numbers contain whatever people put in lot numbers. A raw slash
@@ -53,7 +53,7 @@ class TestQualifierPaths(LotCase):
         lot.openepcis_publish = True
         lot._openepcis_sync()
 
-        self.assertEqual(calls[0]["path"], "/products/%s/10/LOT%%2F2026%%20A%%2BB" % TEST_GTIN)
+        self.assertEqual(calls[0]["path"], "/products/%s/10/LOT%%2F2026%%20A%%2BB" % TEST_GTIN_14)
         self.assertEqual(lot.openepcis_state, "synced")
 
     def test_the_digital_link_extends_to_the_instance(self):
@@ -65,7 +65,7 @@ class TestQualifierPaths(LotCase):
         lot._openepcis_sync()
         self.assertEqual(
             lot.openepcis_digital_link,
-            "https://id.example.test/01/%s/10/BATCH-952-A" % TEST_GTIN,
+            "https://id.example.test/01/%s/10/BATCH-952-A" % TEST_GTIN_14,
         )
 
     def test_renaming_a_lot_re_queues_it(self):
@@ -90,7 +90,7 @@ class TestInstanceDocument(LotCase):
         lot._openepcis_sync()
 
         payload = calls[0]["payload"]
-        self.assertEqual(payload["gtin"], TEST_GTIN)
+        self.assertEqual(payload["gtin"], TEST_GTIN_14)
         self.assertEqual(payload["hasBatchLotNumber"], "BATCH-952-A")
         self.assertNotIn("hasSerialNumber", payload)
 
@@ -181,6 +181,6 @@ class TestProductGate(LotCase):
         self.assertEqual(lot.openepcis_state, "synced")
         self.assertEqual(
             [call["path"] for call in calls],
-            ["/products/%s" % TEST_GTIN, "/products/%s/10/BATCH-952-A" % TEST_GTIN],
+            ["/products/%s" % TEST_GTIN_14, "/products/%s/10/BATCH-952-A" % TEST_GTIN_14],
             "the product goes first, the instance follows",
         )

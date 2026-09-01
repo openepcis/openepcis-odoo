@@ -8,6 +8,7 @@ addon's suite. Identifiers stay in the reserved 952 test range.
 from odoo.addons.openepcis_connector.tests.common import (
     TEST_GTIN,
     TEST_GTIN_2,
+    TEST_GTIN_14,
     OpenepcisCase,
 )
 
@@ -36,4 +37,4 @@ class LotCase(OpenepcisCase):
         return self.env["stock.lot"].create({"name": name, "product_id": product.id})
 
 
-__all__ = ["TEST_GTIN", "TEST_GTIN_2", "LotCase"]
+__all__ = ["TEST_GTIN", "TEST_GTIN_2", "TEST_GTIN_14", "LotCase"]
