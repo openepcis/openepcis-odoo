@@ -18,6 +18,7 @@ from ..vendor.benelog_client.core.gs1 import (  # noqa: F401
     check_digit,
     clean,
     digital_link,
+    gtin14,
     is_valid,
     language_tag,
     problem_with,

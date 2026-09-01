@@ -24,6 +24,12 @@ CLIENT_REQUEST = "odoo.addons.openepcis_connector.models.openepcis_client.Openep
 # GS1 reserves the 952 prefix for testing, so nothing constructed here can ever
 # collide with a real company's identifiers.
 TEST_GTIN = "9520000000004"
+
+#: TEST_GTIN as every GS1 address spells it. Written out rather than derived,
+#: because deriving it is how the missing padding stayed invisible for so long:
+#: a test that computes its expectation the way the code does agrees with the
+#: code whatever the code says.
+TEST_GTIN_14 = "09520000000004"
 TEST_GTIN_2 = "9520000000011"
 TEST_GLN = "9520000000004"
 
@@ -110,6 +116,7 @@ __all__ = [
     "CLIENT_REQUEST",
     "TEST_GLN",
     "TEST_GTIN",
+    "TEST_GTIN_14",
     "TEST_GTIN_2",
     "OpenepcisCase",
     "OpenepcisError",
