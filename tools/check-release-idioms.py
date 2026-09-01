@@ -21,6 +21,10 @@ drift out of step with the code it guards.
 
     python tools/check-release-idioms.py
 
+``--other`` prints the counterpart branch and release as ``key=value`` lines,
+which is how CI finds what to port-check against without naming it in a workflow
+file that would then differ between the branches.
+
 Exit status is 0 when the branch agrees with itself, 1 when it does not.
 """
 
@@ -38,6 +42,10 @@ IMAGE_FILES = (
     "docker/demo/Containerfile",
 )
 IMAGE_RE = re.compile(r"odoo:(\d+)")
+
+# The releases this repository keeps a branch for. The port check derives its
+# counterpart from this, so adding 20.0 later is one edit in one place.
+SUPPORTED = (18, 19)
 VERSION_RE = re.compile(r'"version"\s*:\s*"(\d+)\.0\.')
 
 
@@ -106,9 +114,30 @@ def rel(path):
     return str(path.relative_to(ROOT))
 
 
+def other(release):
+    """The release the counterpart branch targets."""
+    rest = [candidate for candidate in SUPPORTED if candidate != release]
+    if len(rest) != 1:
+        sys.exit("Odoo %s is not one of the two supported releases %s" % (release, SUPPORTED))
+    return rest[0]
+
+
 def main():
     problems = []
     release = target_release(problems)
+
+    # CI asks for this instead of carrying the counterpart in the workflow file.
+    # A branch naming the other release in its own workflow would be one more
+    # difference between the branches, and having fewer of those is the point.
+    if "--other" in sys.argv:
+        if release is None:
+            for problem in problems:
+                print("  %s" % problem, file=sys.stderr)
+            return 1
+        print("release=%d" % other(release))
+        print("branch=%d.0" % other(release))
+        return 0
+
     if release is not None:
         # Flushed, so the release line stays above the problems it explains
         # rather than being buffered past them in CI output.
