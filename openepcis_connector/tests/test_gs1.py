@@ -194,7 +194,8 @@ class TestDigitalLink(unittest.TestCase):
     def test_tolerates_a_trailing_slash(self):
         self.assertEqual(
             digital_link("https://id.epcis.cloud/", "01", TEST_GTIN13),
-            "https://id.epcis.cloud/01/9520000000004",
+            # …and pads the GTIN on the way, because AI 01 is fourteen digits.
+            "https://id.epcis.cloud/01/09520000000004",
         )
 
     def test_cleans_the_key_on_the_way_in(self):
