@@ -342,9 +342,7 @@ class TestReturns(EventCase):
     """What a return says about the shipment the goods went out on."""
 
     def _delivery(self, product, partner):
-        self.env["stock.quant"]._update_available_quantity(
-            product, self.warehouse.lot_stock_id, 5
-        )
+        self.env["stock.quant"]._update_available_quantity(product, self.warehouse.lot_stock_id, 5)
         return self._transfer(self._outgoing_type(), product, quantity=2, partner=partner)
 
     def _return_of(self, delivery):
@@ -440,9 +438,7 @@ class TestReturns(EventCase):
         """An internal transfer names no document, so there is nothing to leave."""
         product = self._published_product(tracking="none")
         product.product_tmpl_id.is_storable = True
-        self.env["stock.quant"]._update_available_quantity(
-            product, self.warehouse.lot_stock_id, 5
-        )
+        self.env["stock.quant"]._update_available_quantity(product, self.warehouse.lot_stock_id, 5)
         internal = self._transfer(self._internal_type(), product, quantity=1)
         self._queued().sudo().unlink()
 
