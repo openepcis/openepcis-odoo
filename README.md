@@ -324,8 +324,8 @@ exactly this reason — so a port stays cheap.
 In practice the two differ in exactly four places in the code, and it is worth knowing
 which, because only one direction of the mistake fails loudly.
 
-**Table constraints.** This branch uses `_sql_constraints`; Odoo 19 declares them as
-`models.Constraint`, which does not exist in 18. Moving the old form to 19 is the
+**Table constraints.** The `18.0` branch uses `_sql_constraints`; Odoo 19 declares them
+as `models.Constraint`, which does not exist in 18. Carrying the old form to 19 is the
 dangerous direction: 19 accepts it, warns about it once, and then **ignores** it, leaving
 a uniqueness rule uncreated — two contacts sharing one GLN, the same movement twice in
 the outbox — with nothing but a startup warning to say so. The other direction is
@@ -336,6 +336,23 @@ a reviewer to notice. `tools/check-release-idioms.py` reads the target release f
 addon manifests and refuses the old form on 19 and the new one on 18. It checks two more
 things a port gets wrong quietly: manifests that disagree with each other about the
 release, and a container tag still pointing at the other one.
+
+And every pull request is carried onto the other branch before it is merged. A
+`port-check` job merges the change into the counterpart, runs the same idiom check there
+and then the full suite on that release's Odoo. A red port check does not mean the change
+is wrong — it means the other branch needs its own version of it, which is much cheaper
+to write while the change is still in front of you. It is advisory until 2026-09-15 and
+blocking after that.
+
+Which branch the counterpart is, is not written in the workflow: CI asks
+`tools/check-release-idioms.py --other`, which derives it from the manifests. A workflow
+that named the other release would itself be one more difference between the branches.
+
+Changes land on `18.0` and reach `19.0` by **merging**, not by applying the same commit
+to both. A commit cherry-picked onto each branch adds the same file twice with no shared
+ancestor, and every later merge of that file then conflicts for good. This paragraph
+exists because that was learned the expensive way, one afternoon, on the very tooling
+meant to keep the branches together.
 
 **The package model.** Odoo 19 renamed `stock.quant.package` to `stock.package` and let
 units nest inside one another. **The produced lot** on a manufacturing order became a
