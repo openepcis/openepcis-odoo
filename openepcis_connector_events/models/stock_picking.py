@@ -39,18 +39,12 @@ from ..vendored import (
     cbv,
     document,
     idempotency_key,
-    instance_uri,
     object_event,
     party,
-    quantity_element,
     transaction_event,
 )
 
 logger = logging.getLogger(__name__)
-
-#: UN/CEFACT code for "piece". EPCIS reads a quantity without a unit as a count
-#: of items, so sending H87 beside it says the same thing twice.
-PIECE = "H87"
 
 
 class StockPicking(models.Model):
@@ -158,34 +152,11 @@ class StockPicking(models.Model):
 
     def _openepcis_lines(self):
         self.ensure_one()
-        return self.move_line_ids.filtered(lambda line: line.state == "done" and line.quantity > 0)
+        return self.move_line_ids._openepcis_done()
 
     def _openepcis_identifiers(self, lines):
-        """The lines, read as EPCs and quantity elements.
-
-        Quantity elements are merged per class: two lines of the same lot are
-        one statement about that lot, not two.
-        """
-        epcs = []
-        merged = {}
-        for line in lines:
-            product = line.product_id
-            gtin = product._openepcis_key()
-            if not gtin or not product.openepcis_publish:
-                continue
-            lot_name = line.lot_id.name or line.lot_name
-            if product.tracking == "serial" and lot_name:
-                epcs.append(instance_uri(gtin, serial=lot_name))
-                continue
-            epc_class = instance_uri(gtin, lot=lot_name) if lot_name else instance_uri(gtin)
-            uom = line.product_uom_id.openepcis_rec20_code or ""
-            key = (epc_class, uom)
-            merged[key] = merged.get(key, 0) + line.quantity
-        quantities = [
-            quantity_element(epc_class, quantity, uom if uom and uom != PIECE else None)
-            for (epc_class, uom), quantity in merged.items()
-        ]
-        return epcs, quantities
+        """The lines, read as EPCs and quantity elements — see stock.move.line."""
+        return lines._openepcis_identifiers()
 
     # ------------------------------------------------------------------
     # Aggregation

@@ -403,6 +403,80 @@ def transaction_event(
     return event
 
 
+def transformation_event(
+    *,
+    event_time: datetime,
+    input_epcs: Sequence[str] = (),
+    input_quantities: Sequence[Mapping[str, Any]] = (),
+    output_epcs: Sequence[str] = (),
+    output_quantities: Sequence[Mapping[str, Any]] = (),
+    transformation_id: str | None = None,
+    biz_step: str | None = None,
+    disposition: str | None = None,
+    read_point: str | None = None,
+    biz_location: str | None = None,
+    biz_transactions: Sequence[tuple[str, str]] = (),
+    source_list: Sequence[tuple[str, str]] = (),
+    destination_list: Sequence[tuple[str, str]] = (),
+    event_identifier: str | None = None,
+    error_declaration: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """A TransformationEvent: these goods stopped being, those began, from them.
+
+    The only event in EPCIS that carries a claim across a production step.
+    Everything else describes goods that continue to exist — they arrive, they
+    move, they are packed. Here the inputs cease and the outputs begin, and the
+    statement worth making is that the second came out of the first. Without it
+    a chain of custody ends at the factory door: the flour arrived, the bread
+    left, and no query connects them.
+
+    It has **no action**, and that is not an omission: "these came into being"
+    and "these ceased to be" are both true at once, and the field could only
+    say one of them.
+
+    Both sides are required. Half a transformation is not a smaller statement
+    but a different and false one — "this came from nothing", or "this became
+    nothing".
+
+    ``transformation_id`` is for a transformation reported in more than one
+    event, where the inputs are known at one moment and the outputs at another:
+    the same identifier on both is what ties them together. A production run
+    reported in one go does not need it.
+    """
+    if not (input_epcs or input_quantities):
+        raise ValueError(
+            "a transformation needs its inputs; without them it claims the output came from nothing"
+        )
+    if not (output_epcs or output_quantities):
+        raise ValueError(
+            "a transformation needs its outputs; without them it claims the input became nothing"
+        )
+    event: dict[str, Any] = {"type": "TransformationEvent"}
+    if event_identifier:
+        event["eventID"] = event_identifier
+    event["eventTime"] = _instant(event_time)
+    event["eventTimeZoneOffset"] = _offset(event_time)
+    if input_epcs:
+        event["inputEPCList"] = list(input_epcs)
+    if input_quantities:
+        event["inputQuantityList"] = [dict(element) for element in input_quantities]
+    if output_epcs:
+        event["outputEPCList"] = list(output_epcs)
+    if output_quantities:
+        event["outputQuantityList"] = [dict(element) for element in output_quantities]
+    if transformation_id:
+        event["transformationID"] = transformation_id
+    if biz_step:
+        event["bizStep"] = biz_step
+    if disposition:
+        event["disposition"] = disposition
+    _place(event, read_point, biz_location)
+    _paperwork(event, biz_transactions, source_list, destination_list)
+    if error_declaration:
+        event["errorDeclaration"] = dict(error_declaration)
+    return event
+
+
 def document(
     events: Iterable[Mapping[str, Any]], creation_time: datetime | None = None
 ) -> dict[str, Any]:
