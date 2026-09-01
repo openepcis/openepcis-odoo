@@ -340,7 +340,7 @@ addon manifests and refuses the old form on 19 and the new one on 18. It checks 
 things a port gets wrong quietly: manifests that disagree with each other about the
 release, and a container tag still pointing at the other one.
 
-And every pull request is carried onto the other branch before it is merged. A
+And every pull request to `18.0` is carried onto `19.0` before it is merged. A
 `port-check` job merges the change into the counterpart, runs the same idiom check there
 and then the full suite on that release's Odoo. A red port check does not mean the change
 is wrong — it means the other branch needs its own version of it, which is much cheaper
@@ -365,7 +365,10 @@ across every installed module, which is a question for a running Odoo; the port 
 answers it by installing and running the suite.
 
 Changes land on `18.0` and reach `19.0` by **merging**, not by applying the same commit
-to both. A commit cherry-picked onto each branch adds the same file twice with no shared
+to both. The direction is one-way, which is why a pull request to `19.0` has no port
+check: merging the following branch back into the leading one would carry that release's
+own adaptations — its constraint form, its model names, its manifests — into a branch
+they are wrong for. A commit cherry-picked onto each branch adds the same file twice with no shared
 ancestor, and every later merge of that file then conflicts for good. This paragraph
 exists because that was learned the expensive way, one afternoon, on the very tooling
 meant to keep the branches together.
