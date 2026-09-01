@@ -100,20 +100,19 @@ jobs:
           pip3 install --no-cache-dir --break-system-packages --no-deps \
             "epcis-event-hash-generator==1.9.3"
 
-      # The bridge addons carry auto_install, so Odoo would decide for itself
+      # Both bridge addons carry auto_install, so Odoo would decide for itself
       # whether they apply — and in a bare database neither Manufacturing nor
-      # Point of Sale is there to trigger them. Naming the manufacturing bridge
-      # explicitly pulls mrp in with it and puts its tests in the run; without
-      # that its code would only ever be imported, never executed. The POS
-      # bridge still has no tests of its own and is still not in this list.
+      # Point of Sale is there to trigger them. Naming them explicitly pulls
+      # mrp and point_of_sale in with them and puts their tests in the run;
+      # without that their code would only ever be imported, never executed.
       - name: Install and run the test suite
         run: |
           odoo -d ci \
-            -i openepcis_connector,openepcis_connector_stock,openepcis_connector_product_expiry,openepcis_connector_events,openepcis_connector_events_mrp \
+            -i openepcis_connector,openepcis_connector_stock,openepcis_connector_product_expiry,openepcis_connector_events,openepcis_connector_events_mrp,openepcis_connector_events_pos \
             --addons-path=/usr/lib/python3/dist-packages/odoo/addons,${GITHUB_WORKSPACE}/addons/openepcis-odoo \
             --db_host=db --db_user=odoo --db_password=odoo \
             --data-dir=/tmp/odoo-data \
-            --test-enable --test-tags /openepcis_connector,/openepcis_connector_stock,/openepcis_connector_product_expiry,/openepcis_connector_events,/openepcis_connector_events_mrp \
+            --test-enable --test-tags /openepcis_connector,/openepcis_connector_stock,/openepcis_connector_product_expiry,/openepcis_connector_events,/openepcis_connector_events_mrp,/openepcis_connector_events_pos \
             --stop-after-init --log-level=test 2>&1 | tee odoo.log
 
       - name: Fail on any failed test
