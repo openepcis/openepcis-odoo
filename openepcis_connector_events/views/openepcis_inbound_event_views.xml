@@ -13,6 +13,7 @@
             decoration-success="state == 'booked'">
         <field name="event_time"/>
         <field name="party_gln" string="Reported by"/>
+        <field name="event_type" optional="show"/>
         <field name="biz_step"/>
         <field name="disposition" optional="show"/>
         <field name="epc_ref" string="Identifier"/>
@@ -37,6 +38,7 @@
         <sheet>
           <group>
             <group string="What happened">
+              <field name="event_type"/>
               <field name="biz_step"/>
               <field name="disposition"/>
               <field name="event_time"/>

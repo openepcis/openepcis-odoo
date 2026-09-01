@@ -188,6 +188,23 @@ class TestInboundPosting(EventCase):
         self.assertNotEqual(picking.state, "done")
         self.assertNotEqual(row.state, "booked")
 
+    def test_only_an_observation_can_complete_a_transfer(self):
+        """A business step that looks right does not make a transformation one.
+
+        Only an observation of goods can attest that a delivery arrived. A
+        transformation says they stopped being themselves; an aggregation says
+        they were packed. Neither is "the goods reached the customer", however
+        the step is labelled.
+        """
+        picking_type, picking = self._waiting_delivery()
+        self._arm(picking_type)
+
+        row = self._hear()
+        row.sudo().write({"event_type": "TransformationEvent"})
+        row.sudo()._consider_posting(row.res_model and self.env[row.res_model].browse(row.res_id))
+
+        self.assertEqual(picking.state, "assigned")
+
     # -- the invariant --------------------------------------------------
 
     def test_no_setting_lets_an_event_create_a_transfer(self):

@@ -112,6 +112,13 @@ class OpenepcisInboundEvent(models.Model):
         condition here is deliberately outside the reach of configuration.
         """
         self.ensure_one()
+        if self.event_type and self.event_type != "ObjectEvent":
+            # Only an observation of goods can complete a transfer of ours. A
+            # transformation says they stopped being themselves, an aggregation
+            # says they were packed, a transaction event says which paperwork
+            # they belong to — none of those is "the delivery arrived", and a
+            # business step that happens to look right does not make them so.
+            return _("a %s does not attest that a transfer completed") % self.event_type
         if picking.state not in ADVANCEABLE:
             return _("transfer is %s, not reserved and waiting") % picking.state
         if picking.company_id != self.company_id:
