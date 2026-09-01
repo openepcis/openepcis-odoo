@@ -172,7 +172,15 @@ class TestWhereItHappened(EventCase):
 
 @tagged("post_install", "-at_install")
 class TestPaperwork(EventCase):
-    def test_a_delivery_with_an_address_links_to_the_document_itself(self):
+    def test_the_paperwork_is_named_the_same_way_from_every_deployment(self):
+        """The reference is part of the event's identity, so it may not carry a host.
+
+        A URL would be the more useful of the two forms the schema allows — it
+        can be followed. But the reference goes into the canonical hash, and a
+        deployment's address in the identity means the same movement gets two
+        names depending on where it was reported from. Setting web.base.url
+        must therefore change nothing here.
+        """
         self.env["ir.config_parameter"].sudo().set_param(
             "web.base.url", "https://odoo.example.test"
         )
@@ -184,9 +192,11 @@ class TestPaperwork(EventCase):
         import json
 
         event = json.loads(self._queued().payload)["epcisBody"]["eventList"][0]
+        reference = event["bizTransactionList"][0]["bizTransaction"]
+        self.assertNotIn("odoo.example.test", reference)
         self.assertEqual(
-            event["bizTransactionList"][0]["bizTransaction"],
-            "https://odoo.example.test/odoo/stock.picking/%d" % picking.id,
+            reference,
+            "urn:epcglobal:cbv:bt:%s:%s" % (TEST_GLN, picking.name.replace("/", "%2F")),
         )
 
     def test_a_delivery_carries_its_despatch_advice_and_the_customer(self):
