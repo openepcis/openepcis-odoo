@@ -190,27 +190,66 @@ class StockPicking(models.Model):
     # ------------------------------------------------------------------
 
     def _openepcis_queue_aggregations(self, read_point):
-        """One event per logistic unit this transfer packed.
+        """What this transfer did to logistic units: took them apart, filled them.
 
-        Reported before the movement, because that is the order they happened
-        in: goods are put into a unit and the unit then moves.
+        Reported before the movement, in the order things happen: goods come
+        out of a unit before they go into another, and the unit moves last.
+
+        Both halves are needed, and for a while only one was here. An
+        aggregation is a standing statement — scan the SSCC and the repository
+        answers what is underneath it — so a unit that is emptied and never
+        said so keeps answering with goods that are no longer in it. The
+        operation types could already be labelled ``unpacking``, which made the
+        gap easy to miss: the label was there, the event was not.
         """
         self.ensure_one()
-        by_package = {}
+        self._openepcis_queue_aggregation(
+            read_point, self._openepcis_units_emptied(), cbv.DELETE, cbv.UNPACKING
+        )
+        self._openepcis_queue_aggregation(
+            read_point, self._openepcis_units_filled(), cbv.ADD, cbv.PACKING
+        )
+
+    def _openepcis_units_emptied(self):
+        """Units this transfer took goods out of, and the lines that left them."""
+        return self._openepcis_by_package("package_id", "result_package_id")
+
+    def _openepcis_units_filled(self):
+        """Units this transfer put goods into, and the lines that went in."""
+        return self._openepcis_by_package("result_package_id", "package_id")
+
+    def _openepcis_by_package(self, field, other):
+        """Lines grouped by the unit in ``field``, where that unit changed.
+
+        Goods that stay in the unit they were already in were neither packed
+        nor unpacked — a pallet that merely moves is a movement, and reporting
+        it as a fresh packing would restate an aggregation that never changed.
+        So a line only counts where the two package fields differ.
+
+        A unit without an SSCC is skipped on both sides. We never told anybody
+        it held anything, so there is nothing to add to and nothing to take
+        apart.
+        """
+        self.ensure_one()
+        grouped = {}
         for line in self._openepcis_lines():
-            package = line.result_package_id
-            if package and package.openepcis_sscc:
-                by_package.setdefault(package, self.env["stock.move.line"])
-                by_package[package] |= line
+            package = line[field]
+            if package and package.openepcis_sscc and package != line[other]:
+                grouped.setdefault(package, self.env["stock.move.line"])
+                grouped[package] |= line
+        return grouped
+
+    def _openepcis_queue_aggregation(self, read_point, by_package, action, biz_step):
+        self.ensure_one()
         for package, lines in by_package.items():
             epcs, quantities = self._openepcis_identifiers(lines)
             if not epcs and not quantities:
                 continue
             event = aggregation_event(
-                action=cbv.ADD,
+                action=action,
                 event_time=self._openepcis_event_time(),
                 parent_id=package._openepcis_uri(),
-                biz_step=cbv.PACKING,
+                biz_step=biz_step,
                 disposition=cbv.IN_PROGRESS,
                 child_epcs=epcs,
                 child_quantities=quantities,
@@ -222,7 +261,13 @@ class StockPicking(models.Model):
                 document([event]),
                 "%s / %s" % (self.name, package.name),
                 self.company_id,
-                idem_key=self._openepcis_idem_key(cbv.PACKING, epcs, quantities),
+                # The unit belongs in the key. Two pallets of the same lot in
+                # one transfer state the same contents, so without it the
+                # second pallet's event met the first one's row in the outbox
+                # and was silently dropped.
+                idem_key=self._openepcis_idem_key(
+                    biz_step, epcs, quantities, package.openepcis_sscc
+                ),
                 source=self,
             )
 
@@ -345,11 +390,14 @@ class StockPicking(models.Model):
         partner = self.partner_id
         return partner and partner.openepcis_gln or ""
 
-    def _openepcis_idem_key(self, biz_step, epcs, quantities):
+    def _openepcis_idem_key(self, biz_step, epcs, quantities, *extra):
         """This database's own handle on a movement it has already reported.
 
         The database, the transfer and the business step make it *this*
-        movement; the identifiers make it this content. Nothing here changes
+        movement; the identifiers make it this content. ``extra`` is for what
+        those two do not separate — an aggregation passes the unit's SSCC,
+        because two pallets of the same lot in one transfer state the same
+        contents and would otherwise share a key. Nothing here changes
         between two reports of the same movement, which is the point: the
         second report finds the first row and adds nothing.
 
@@ -363,4 +411,4 @@ class StockPicking(models.Model):
         self.ensure_one()
         database = self.env["ir.config_parameter"].sudo().get_param("database.uuid") or "odoo"
         content = sorted(epcs) + sorted(element["epcClass"] for element in quantities)
-        return idempotency_key(database, self.name, biz_step, *content)
+        return idempotency_key(database, self.name, biz_step, *extra, *content)
