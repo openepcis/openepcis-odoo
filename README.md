@@ -321,16 +321,15 @@ logic is deliberately version-neutral Python and the views avoid custom
 JavaScript — the GPC picker is a wizard rather than an autocomplete widget for
 exactly this reason — so a port stays cheap.
 
-In practice the two differ in exactly one place in the code, and it is worth knowing
+In practice the two differ in exactly four places in the code, and it is worth knowing
 which, because only one direction of the mistake fails loudly.
 
-**Table constraints.** Odoo 19 declares them as `models.Constraint`, which does not
-exist in 18; the `18.0` branch uses `_sql_constraints`, which 19 accepts, warns about
-once, and then **ignores**. The old form on 19 would therefore leave a uniqueness rule
-uncreated — two contacts sharing one GLN, the same movement twice in the outbox — with
-nothing but a startup warning to say so. Anything moved between the branches has to be
-checked for this. The other direction is harmless: 18 does not know `models.Constraint`
-and says so at once.
+**Table constraints.** The `18.0` branch uses `_sql_constraints`; Odoo 19 declares them
+as `models.Constraint`, which does not exist in 18. Carrying the old form to 19 is the
+dangerous direction: 19 accepts it, warns about it once, and then **ignores** it, leaving
+a uniqueness rule uncreated — two contacts sharing one GLN, the same movement twice in
+the outbox — with nothing but a startup warning to say so. The other direction is
+harmless: 18 does not know `models.Constraint` and says so at once.
 
 Because only one of the two directions fails loudly, CI checks it rather than trusting
 a reviewer to notice. `tools/check-release-idioms.py` reads the target release from the
@@ -338,10 +337,32 @@ addon manifests and refuses the old form on 19 and the new one on 18. It checks 
 things a port gets wrong quietly: manifests that disagree with each other about the
 release, and a container tag still pointing at the other one.
 
+And every pull request is carried onto the other branch before it is merged. A
+`port-check` job merges the change into the counterpart, runs the same idiom check there
+and then the full suite on that release's Odoo. A red port check does not mean the change
+is wrong — it means the other branch needs its own version of it, which is much cheaper
+to write while the change is still in front of you. It is advisory until 2026-09-15 and
+blocking after that.
+
+Which branch the counterpart is, is not written in the workflow: CI asks
+`tools/check-release-idioms.py --other`, which derives it from the manifests. A workflow
+that named the other release would itself be one more difference between the branches.
+
+Changes land on `18.0` and reach `19.0` by **merging**, not by applying the same commit
+to both. A commit cherry-picked onto each branch adds the same file twice with no shared
+ancestor, and every later merge of that file then conflicts for good. This paragraph
+exists because that was learned the expensive way, one afternoon, on the very tooling
+meant to keep the branches together.
+
+**The package model.** Odoo 19 renamed `stock.quant.package` to `stock.package` and let
+units nest inside one another. **The produced lot** on a manufacturing order became a
+Many2many, `lot_producing_ids`. And **a search group** on 19 takes neither `expand` nor
+`string`.
+
 Installing the wrong branch cannot happen quietly either. Odoo 18 refuses a manifest
 version of `19.0.x` outright, before it loads any Python.
 
-The units of measure look like a second difference and are not: Odoo 19 renamed some
+The units of measure look like a further difference and are not: Odoo 19 renamed some
 records (`product_uom_mm` became `product_uom_millimeter`) and added others
 (`product_uom_milliliter`). Both spellings are listed in one table and a name the
 running release does not have is skipped, so the same file serves both.
