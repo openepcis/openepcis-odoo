@@ -125,26 +125,32 @@ class StockQuantPackage(models.Model):
         aggregation nobody withdraws keeps answering with goods that have been
         on the shelf for weeks.
 
-        Read before the call, because afterwards the quants no longer name the
-        unit and there is nothing left to describe. Never raises: emptying a
-        pallet must not fail because a repository is unreachable, which is the
-        same rule the transfer hook follows.
+        Everything the event needs is read *before* the call, and that is more
+        than it looks: after it, the quants no longer name the unit, so the
+        contents are gone — and so is ``location_id``, which Odoo computes from
+        those same quants. Reading the read point afterwards found an empty
+        location and the report died on a singleton. Whatever the unit knows
+        about itself, it knows it only until it is emptied.
+
+        Never raises: emptying a pallet must not fail because a repository is
+        unreachable, which is the same rule the transfer hook follows.
         """
-        contents = {package: package._openepcis_contents() for package in self}
+        described = {package: package._openepcis_describe() for package in self}
         result = super().unpack()
-        for package, (epcs, quantities) in contents.items():
+        for package, (epcs, quantities, read_point) in described.items():
             try:
-                package._openepcis_report_unpacked(epcs, quantities)
+                package._openepcis_report_unpacked(epcs, quantities, read_point)
             except Exception:  # noqa: BLE001 — a report must never fail an unpack
                 logger.exception("OpenEPCIS: reporting the unpacking of %s failed", package.name)
         return result
 
-    def _openepcis_contents(self):
-        """What this unit holds, as EPCs and quantity elements.
+    def _openepcis_describe(self):
+        """What this unit holds and where it stands — while it still knows.
 
-        The same reading the transfer hook applies to its move lines, applied
-        to quants instead: a serial is an instance and belongs in the EPC list,
-        a lot is a class and belongs in the quantity list.
+        The contents read the way the transfer hook reads its move lines: a
+        serial is an instance and belongs in the EPC list, a lot is a class and
+        belongs in the quantity list. The read point comes from the location,
+        which answers with its own GLN or the nearest one above it.
         """
         self.ensure_one()
         epcs = []
@@ -165,9 +171,12 @@ class StockQuantPackage(models.Model):
             quantity_element(epc_class, quantity, uom or None)
             for (epc_class, uom), quantity in merged.items()
         ]
-        return epcs, quantities
+        # The same walk a transfer uses, asked of the location while the unit
+        # still has one.
+        read_point = self.location_id._openepcis_read_point() if self.location_id else ""
+        return epcs, quantities, read_point
 
-    def _openepcis_report_unpacked(self, epcs, quantities):
+    def _openepcis_report_unpacked(self, epcs, quantities, read_point):
         """Say that this unit no longer holds what it held."""
         self.ensure_one()
         if not epcs and not quantities:
@@ -175,9 +184,6 @@ class StockQuantPackage(models.Model):
         company = self.company_id or self.env.company
         if not self.openepcis_sscc or not self.env["openepcis.client"]._epcis_configured(company):
             return
-        # The location knows how to answer this — its own GLN or the nearest
-        # one above it — and it is the same walk a transfer uses.
-        read_point = self.location_id._openepcis_read_point()
         if not read_point:
             logger.info(
                 "OpenEPCIS: %s was unpacked, but no location carries a GLN — nothing reported",
