@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+  <!--
+    The trust setting sits on the same page as the GLN, and immediately under
+    it, because the two are one thought: this is who he is in the events, and
+    this is what we let that mean. Split across two screens, somebody would set
+    one and never find the other.
+  -->
+  <record id="res_partner_form_view_openepcis_inbound" model="ir.ui.view">
+    <field name="name">res.partner.form.openepcis.inbound</field>
+    <field name="model">res.partner</field>
+    <field name="inherit_id" ref="openepcis_connector.res_partner_form_view_openepcis"/>
+    <field name="arch" type="xml">
+
+      <xpath expr="//page[@name='openepcis']/group[2]" position="after">
+        <group string="Incoming events">
+          <field name="openepcis_inbound_trusted"/>
+          <div colspan="2" class="text-muted"
+               invisible="not openepcis_inbound_trusted">
+            Only takes effect where the operation type allows it as well, and only
+            for a transfer that is already reserved and names this contact. An event
+            reported under a different GLN than the one above is not attributed here.
+          </div>
+          <div colspan="2" class="text-warning"
+               invisible="openepcis_gln or not openepcis_inbound_trusted">
+            Without a GLN nothing can be attributed to this contact, so this setting
+            will never take effect.
+          </div>
+        </group>
+      </xpath>
+
+    </field>
+  </record>
+
+</odoo>

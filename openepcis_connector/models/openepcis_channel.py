@@ -43,6 +43,9 @@ class OpenepcisChannel(models.Model):
     )
     fetched_on = fields.Datetime(readonly=True)
 
+    # Odoo 19 declares table constraints this way. The 18.0 branch still uses
+    # _sql_constraints, which 19 accepts, warns about once and then ignores — so
+    # the old form here would leave the rule uncreated and nothing would say so.
     _channel_company_unique = models.Constraint(
         "unique (channel_id, company_id)",
         "A channel is listed once per company.",

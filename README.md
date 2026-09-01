@@ -81,6 +81,35 @@ Both are GLNs; the resolver routes them separately.
 
 ---
 
+## Lots and serial numbers
+
+A GTIN names the *model* of a thing. The batch it came from and the single unit
+in front of you are one level down, and GS1 keeps that level in the Digital Link
+path: `/01/<gtin>` is the model, `/01/<gtin>/10/<lot>` the batch,
+`/01/<gtin>/21/<serial>` the unit. The catalog stores a distinct document at
+each level.
+
+The bridge addon **`openepcis_connector_stock`** publishes Odoo's lots and
+serial numbers (`stock.lot`) to those instance paths. It installs itself
+automatically wherever this connector and the Inventory app are both present —
+the main addon stays dependent on `product` only. Whether a record becomes a
+batch or a serial follows the product's tracking setting, and the instance-level
+Digital Link with its QR code appears on the lot form, where a warehouse
+actually prints labels.
+
+One rule of order: **the product goes first.** An instance document hangs off
+the product's GTIN, so a lot whose product is not published yet is not an
+error — it waits, says so on its form, and follows on its own the moment the
+product lands in the catalog.
+
+Instance fields are ordinary mapping rows. A second, data-only bridge,
+**`openepcis_connector_product_expiry`**, maps the expiry dates that the
+`product_expiry` module keeps on lots — expiration date, best-before date — so a
+database without that module never carries mapping rows pointing at fields it
+does not have.
+
+---
+
 ## Installation
 
 ```bash
@@ -153,7 +182,6 @@ revoked, because the fix is entirely different.
 measured against Keycloak 26.2.5 — including why RFC 8693 token exchange cannot
 mint an offline token and what to use instead. `doc/keycloak-test-realm.json`
 reproduces it locally in one command.
-
 
 ---
 
@@ -241,8 +269,11 @@ prefix for anything experimental — GS1 reserves it for exactly this.
 docker compose up -d
 
 # The test suite
-docker compose run --rm odoo odoo -d test -i openepcis_connector \
-  --test-enable --test-tags /openepcis_connector --stop-after-init
+docker compose run --rm odoo odoo -d test \
+  -i openepcis_connector,openepcis_connector_stock,openepcis_connector_product_expiry \
+  --test-enable \
+  --test-tags /openepcis_connector,/openepcis_connector_stock,/openepcis_connector_product_expiry \
+  --stop-after-init
 
 # Lint and formatting, as CI runs them
 ruff check . && ruff format --check .
@@ -287,26 +318,28 @@ logic is deliberately version-neutral Python and the views avoid custom
 JavaScript — the GPC picker is a wizard rather than an autocomplete widget for
 exactly this reason — so a port stays cheap.
 
-In practice the two branches differ in exactly one place, and it is worth knowing
-which, because Odoo does not fail loudly about it:
+In practice the two differ in exactly one place in the code, and it is worth knowing
+which, because only one direction of the mistake fails loudly.
 
 **Table constraints.** Odoo 19 declares them as `models.Constraint`, which does not
-exist in 18; 18.0 still uses `_sql_constraints`, which 19 accepts, warns about once,
-and then **ignores** — so on 19 the old form would leave the GLN uniqueness rule
-uncreated and two contacts could share one. Anything moved between the branches has
-to be checked for this, because only one of the two directions fails loudly.
+exist in 18; the `18.0` branch uses `_sql_constraints`, which 19 accepts, warns about
+once, and then **ignores**. The old form on 19 would therefore leave a uniqueness rule
+uncreated — two contacts sharing one GLN, the same movement twice in the outbox — with
+nothing but a startup warning to say so. Anything moved between the branches has to be
+checked for this. The other direction is harmless: 18 does not know `models.Constraint`
+and says so at once.
 
-Installing the wrong branch, at least, cannot happen quietly: Odoo 18 refuses a
-manifest version of `19.0.x` outright, before it loads any Python.
+Installing the wrong branch cannot happen quietly either. Odoo 18 refuses a manifest
+version of `19.0.x` outright, before it loads any Python.
 
-The units of measure look like a second difference but are not: Odoo 19 renamed some
+The units of measure look like a second difference and are not: Odoo 19 renamed some
 records (`product_uom_mm` became `product_uom_millimeter`) and added others
 (`product_uom_milliliter`). Both spellings are listed in one table and a name the
 running release does not have is skipped, so the same file serves both.
 
 ### About the screenshots
 
-Odoo 19 with demo data. Hostnames are `example.org` placeholders, the published
+Odoo 18 with demo data — the shots are shared with the `18.0` branch and were not retaken here, because none of the screens they show differs between the two releases. Hostnames are `example.org` placeholders, the published
 states were seeded locally, so nothing shown was ever registered anywhere, and
 every identifier is in the reserved 952 test range — check digits included, which
 were verified against the platform's own validator rather than this addon's.

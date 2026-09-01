@@ -32,6 +32,20 @@ logger = logging.getLogger(__name__)
 #: second record or, worse, burn a GS1 key.
 IDEMPOTENT_METHODS = frozenset({"GET", "PUT", "DELETE", "HEAD"})
 
+#: What this client will accept back, and why it is not just ``application/json``.
+#:
+#: The EPCIS capture endpoint produces ``application/ld+json`` and
+#: ``application/problem+json`` and nothing else. Asking for plain JSON — the
+#: obvious thing, and what this sent — is answered with **406 Not Acceptable**
+#: before the document is even looked at, so no event from this client would
+#: ever have been captured against a real repository. It went unnoticed because
+#: every test here stubs the transport at the seam, and the connector that runs
+#: in production is the Java one, which sends its own headers.
+#:
+#: Listing both keeps the catalog and registry endpoints, which answer plain
+#: JSON, working as before: the server picks what it can produce.
+ACCEPT = "application/json, application/ld+json"
+
 MAX_ATTEMPTS = 3
 BACKOFF_SECONDS: tuple[float, ...] = (0.5, 1.5)
 
@@ -79,9 +93,15 @@ class Client:
         payload: Any = None,
         params: dict[str, Any] | None = None,
         timeout: tuple[float, float] | None = None,
+        raw: bool = False,
     ) -> Any:
         """Call the platform and return the decoded body.
 
+        :param raw: return the ``requests`` response instead of the parsed
+            body. For the handful of endpoints whose answer is in the headers —
+            EPCIS capture replies ``202`` with an empty body and a ``Location``
+            naming the job — where decoding the body would discard the only
+            thing the call returned.
         :returns: the parsed JSON, or ``None`` for an empty body (``204``).
         :raises BenelogError: for every non-2xx answer and every transport
             failure. Callers decide whether that aborts them or gets recorded.
@@ -100,7 +120,7 @@ class Client:
                 backoff = 0
 
             headers = {
-                "Accept": "application/json",
+                "Accept": ACCEPT,
                 "Authorization": f"Bearer {self._auth.bearer()}",
             }
             if payload is not None:
@@ -139,7 +159,7 @@ class Client:
                 continue
 
             if response.status_code < 300:
-                return self._decode(response)
+                return response if raw else self._decode(response)
 
             error = self._error_from(response, path)
             used += 1
@@ -167,7 +187,7 @@ class Client:
         """
         url = self._url(path)
         headers = {
-            "Accept": "application/json",
+            "Accept": ACCEPT,
             "Authorization": f"Bearer {self._auth.bearer()}",
         }
         try:

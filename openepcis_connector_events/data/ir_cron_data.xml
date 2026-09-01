@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+  <data noupdate="1">
+
+    <!--
+      One job for both halves of delivery: send what is waiting, then ask what
+      became of what was sent. They belong together because the second is only
+      interesting a moment after the first — capture is asynchronous, and a
+      document accepted on this run is usually settled by the next.
+
+      Every minute, not every five: an event is a statement about a moment, and
+      the value of knowing where a pallet is decays faster than the value of
+      knowing what a product is called.
+    -->
+    <record id="cron_capture_events" model="ir.cron">
+      <field name="name">OpenEPCIS: deliver visibility events</field>
+      <field name="model_id" ref="model_openepcis_event"/>
+      <field name="state">code</field>
+      <field name="code">model._cron_capture()</field>
+      <field name="interval_number">1</field>
+      <field name="interval_type">minutes</field>
+      <field name="nextcall" eval="(DateTime.now() + timedelta(minutes=1)).strftime('%Y-%m-%d %H:%M:%S')"/>
+      <field name="active" eval="True"/>
+    </record>
+
+    <!--
+      The reading direction. Five minutes rather than one: an event from
+      somebody else is news, and news does not go stale as fast as our own
+      outbox does — nobody is waiting at a loading bay for it.
+
+      Pull rather than a subscription, and for one reason: catching up. The
+      repository stamps recordTime as it writes, so a run that missed an hour
+      simply asks for that hour next time. Nothing has to hold a delivery queue,
+      and this Odoo does not have to be reachable from outside.
+    -->
+    <record id="cron_poll_inbound_events" model="ir.cron">
+      <field name="name">OpenEPCIS: read visibility events</field>
+      <field name="model_id" ref="model_openepcis_inbound_event"/>
+      <field name="state">code</field>
+      <field name="code">model._cron_poll()</field>
+      <field name="interval_number">5</field>
+      <field name="interval_type">minutes</field>
+      <field name="nextcall" eval="(DateTime.now() + timedelta(minutes=5)).strftime('%Y-%m-%d %H:%M:%S')"/>
+      <field name="active" eval="True"/>
+    </record>
+
+  </data>
+</odoo>

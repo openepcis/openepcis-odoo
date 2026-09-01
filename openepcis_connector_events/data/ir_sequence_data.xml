@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+  <data noupdate="1">
+
+    <!--
+      The serial reference of an SSCC. Padded to whatever room the company
+      prefix leaves, so the sequence itself carries no padding: a deployment
+      with a seven-digit prefix has nine digits of room, one with a twelve-digit
+      prefix has four, and the same sequence serves both until the shorter one
+      runs out.
+    -->
+    <record id="seq_openepcis_sscc" model="ir.sequence">
+      <field name="name">OpenEPCIS SSCC serial reference</field>
+      <field name="code">openepcis.sscc</field>
+      <field name="implementation">standard</field>
+      <field name="padding">1</field>
+      <field name="number_next">1</field>
+      <field name="number_increment">1</field>
+    </record>
+
+  </data>
+</odoo>
