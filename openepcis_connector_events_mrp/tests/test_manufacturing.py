@@ -65,7 +65,6 @@ class TestManufacturing(EventCase):
             )
             self.env["stock.move"].create(
                 {
-                    "name": self.flour.name,
                     "product_id": self.flour.id,
                     "product_uom": self.flour.uom_id.id,
                     "product_uom_qty": 25,

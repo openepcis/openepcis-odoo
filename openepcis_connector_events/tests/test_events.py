@@ -360,7 +360,6 @@ class TestReturns(EventCase):
                         0,
                         0,
                         {
-                            "name": move.product_id.name,
                             "product_id": move.product_id.id,
                             "product_uom_qty": 2,
                             "product_uom": move.product_uom.id,
@@ -462,7 +461,6 @@ class TestAggregation(EventCase):
                         0,
                         0,
                         {
-                            "name": product.name,
                             "product_id": product.id,
                             "product_uom_qty": 1,
                             "product_uom": product.uom_id.id,
@@ -528,7 +526,6 @@ class TestAggregation(EventCase):
                         0,
                         0,
                         {
-                            "name": product.name,
                             "product_id": product.id,
                             "product_uom_qty": 1,
                             "product_uom": product.uom_id.id,
@@ -570,7 +567,6 @@ class TestAggregation(EventCase):
                         0,
                         0,
                         {
-                            "name": product.name,
                             "product_id": product.id,
                             "product_uom_qty": 1,
                             "product_uom": product.uom_id.id,
@@ -650,7 +646,6 @@ class TestAggregation(EventCase):
                         0,
                         0,
                         {
-                            "name": product.name,
                             "product_id": product.id,
                             "product_uom_qty": 1,
                             "product_uom": product.uom_id.id,
@@ -691,7 +686,6 @@ class TestAggregation(EventCase):
                         0,
                         0,
                         {
-                            "name": product.name,
                             "product_id": product.id,
                             "product_uom_qty": 2,
                             "product_uom": product.uom_id.id,

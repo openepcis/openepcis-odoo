@@ -152,7 +152,6 @@ class EventCase(LotCase):
                         0,
                         0,
                         {
-                            "name": product.name,
                             "product_id": product.id,
                             "product_uom_qty": quantity,
                             "product_uom": product.uom_id.id,
@@ -185,7 +184,6 @@ class EventCase(LotCase):
                         0,
                         0,
                         {
-                            "name": product.name,
                             "product_id": product.id,
                             "product_uom_qty": quantity,
                             "product_uom": product.uom_id.id,
