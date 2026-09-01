@@ -54,8 +54,14 @@ class TestManufacturing(EventCase):
             }
         )
         if with_components:
+            # Both products are lot-tracked, so Odoo insists on knowing which
+            # flour went in and which loaf came out — which is exactly what
+            # makes the event worth sending.
             self.env["stock.quant"]._update_available_quantity(
-                self.flour, self.production_location, 100
+                self.flour,
+                self.production_location,
+                100,
+                lot_id=self._lot("FLOUR-7", self.flour),
             )
             self.env["stock.move"].create(
                 {
@@ -70,6 +76,7 @@ class TestManufacturing(EventCase):
             )
         production.action_confirm()
         production.action_assign()
+        production.lot_producing_id = self._lot("LOAF-1", self.bread)
         production.qty_producing = quantity
         production._set_qty_producing()
         production.button_mark_done()
