@@ -100,8 +100,7 @@ jobs:
           path: addons/openepcis-odoo
 
       - name: Install and run the test suite
-        run: sh addons/openepcis-odoo/tools/ci-run-tests.sh \
-               "${GITHUB_WORKSPACE}/addons/openepcis-odoo"
+        run: sh addons/openepcis-odoo/tools/ci-run-tests.sh "$GITHUB_WORKSPACE/addons/openepcis-odoo"
 
   # Which branch is the counterpart? Asked of the manifests, not written into
   # this file — a workflow that names the other release would itself become a
@@ -183,5 +182,4 @@ jobs:
         run: python3 tools/check-release-idioms.py
 
       - name: Install and run the test suite there
-        run: sh addons/openepcis-odoo/tools/ci-run-tests.sh \
-               "${GITHUB_WORKSPACE}/addons/openepcis-odoo"
+        run: sh addons/openepcis-odoo/tools/ci-run-tests.sh "$GITHUB_WORKSPACE/addons/openepcis-odoo"
