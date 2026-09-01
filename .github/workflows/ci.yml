@@ -102,9 +102,10 @@ jobs:
       - name: Install and run the test suite
         run: sh addons/openepcis-odoo/tools/ci-run-tests.sh "$GITHUB_WORKSPACE/addons/openepcis-odoo"
 
-  # Which branch is the counterpart? Asked of the manifests, not written into
-  # this file — a workflow that names the other release would itself become a
-  # difference between the branches, and fewer of those is the whole point.
+  # Which branch is the counterpart, if any? Asked of the manifests, not written
+  # into this file — a workflow that named the other release would itself become
+  # a difference between the branches, and fewer of those is the whole point.
+  # Answers nothing on the following branch, which skips the port check.
   port-target:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -130,6 +131,9 @@ jobs:
     # branches have stayed in step through a few ordinary changes.
     continue-on-error: true
     needs: port-target
+    # Empty on the following branch: merging it back into the leader would carry
+    # this release's own adaptations into a branch they are wrong for.
+    if: needs.port-target.outputs.release != ''
     runs-on: ubuntu-latest
     container:
       image: odoo:${{ needs.port-target.outputs.release }}
