@@ -11,6 +11,13 @@ from odoo.tests import tagged
 
 from .common import TEST_GLN, TEST_GTIN, TEST_PARTNER_GLN, EventCase, Outcome
 
+#: TEST_GTIN as AI 01 spells it. Written out rather than derived from
+#: TEST_GTIN, because deriving it is how the missing padding stayed invisible:
+#: a test that computes its expectation the way the code does agrees with the
+#: code whatever the code says. This is the form GS1 prescribes, and a live
+#: repository refuses anything else ("Translation failed").
+TEST_GTIN_14 = "09520000000004"
+
 
 @tagged("post_install", "-at_install")
 class TestWhatIsReported(EventCase):
@@ -28,7 +35,7 @@ class TestWhatIsReported(EventCase):
         self._transfer(self._incoming_type(), product, quantity=1, lot_name="952-0007")
 
         event = self._event()
-        self.assertEqual(event["epcList"], ["https://id.gs1.org/01/%s/21/952-0007" % TEST_GTIN])
+        self.assertEqual(event["epcList"], ["https://id.gs1.org/01/%s/21/952-0007" % TEST_GTIN_14])
         self.assertNotIn("quantityList", event)
 
     def test_a_lot_is_a_class_and_lands_in_the_quantity_list(self):
@@ -41,8 +48,27 @@ class TestWhatIsReported(EventCase):
         self.assertNotIn("epcList", event)
         self.assertEqual(
             event["quantityList"],
-            [{"epcClass": "https://id.gs1.org/01/%s/10/BATCH-A" % TEST_GTIN, "quantity": 12}],
+            [{"epcClass": "https://id.gs1.org/01/%s/10/BATCH-A" % TEST_GTIN_14, "quantity": 12}],
         )
+
+    def test_the_barcode_is_an_ean13_and_the_event_carries_fourteen_digits(self):
+        """AI 01 is fourteen digits, whatever the label says.
+
+        The product carries an ordinary EAN-13 — that is the normal case in a
+        warehouse — and the event has to carry the padded form. An event with
+        thirteen digits is accepted by the capture endpoint with a 202 and then
+        refused by the repository with "Translation failed"; measured against a
+        live repository from a running Odoo on 2026-08-31.
+        """
+        self.assertEqual(len(TEST_GTIN), 13, "the label is an EAN-13")
+        self.assertEqual(TEST_GTIN_14, "0" + TEST_GTIN)
+
+        product = self._published_product(tracking="none")
+        self.assertEqual(product.barcode, TEST_GTIN)
+        self._transfer(self._incoming_type(), product, quantity=1)
+
+        epc_class = self._event()["quantityList"][0]["epcClass"]
+        self.assertTrue(epc_class.endswith("/01/" + TEST_GTIN_14), epc_class)
 
     def test_untracked_goods_are_reported_as_the_trade_item_itself(self):
         # A warehouse that tracks nothing still produces useful events: the
@@ -53,7 +79,7 @@ class TestWhatIsReported(EventCase):
         event = self._event()
         self.assertEqual(
             event["quantityList"],
-            [{"epcClass": "https://id.gs1.org/01/%s" % TEST_GTIN, "quantity": 5}],
+            [{"epcClass": "https://id.gs1.org/01/%s" % TEST_GTIN_14, "quantity": 5}],
         )
 
     def test_an_unpublished_product_is_left_out_entirely(self):
@@ -351,7 +377,7 @@ class TestAggregation(EventCase):
         self.assertEqual(aggregations[0]["bizStep"], "packing")
         self.assertEqual(
             aggregations[0]["childEPCs"],
-            ["https://id.gs1.org/01/%s/21/952-0100" % TEST_GTIN],
+            ["https://id.gs1.org/01/%s/21/952-0100" % TEST_GTIN_14],
         )
 
     def test_a_new_package_is_given_an_sscc_from_the_company_prefix(self):

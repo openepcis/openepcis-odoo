@@ -70,14 +70,42 @@ EVENT_NAMESPACE = uuid.UUID("9b7d5a24-1f6e-5c8a-9e42-6a0d3b5c7e11")
 QUALIFIER_ORDER = ("22", "10", "21")
 
 
+def gtin14(gtin: str) -> str:
+    """A GTIN in the 14-digit form a Digital Link requires.
+
+    AI 01 is fourteen digits — always, whatever length the barcode on the
+    product happens to be. A GTIN-13 (the ordinary EAN), a GTIN-12 or a GTIN-8
+    are the same identifier written shorter, and the Digital Link form is the
+    padded one.
+
+    This was missing, and it was invisible from inside: an event carrying
+    ``/01/9521234000013`` (thirteen digits, straight from ``product.barcode``)
+    is accepted by the capture endpoint with a 202 and then **rejected** by the
+    repository's validation with "Translation failed" — measured against
+    api.dev.epcis.cloud on 2026-08-30. The tests could not see it because they
+    built the expected identifier out of the same barcode field, so they
+    asserted whatever the code produced.
+
+    Anything that is not a plain digit string is left alone: it is not a GTIN,
+    and quietly reshaping it would be worse than passing it on.
+    """
+    digits = str(gtin).strip()
+    if not digits.isdigit() or len(digits) > 14:
+        return digits
+    return digits.zfill(14)
+
+
 def instance_uri(gtin: str, lot: str | None = None, serial: str | None = None) -> str:
     """The canonical URI of a trade item, a lot of it, or a single unit.
 
     ``09521234000012`` alone is the model. With a lot it is an LGTIN, with a
     serial an SGTIN, and with both it is a single unit whose lot is also known.
+
+    The GTIN is padded to fourteen digits, because that is what AI 01 is; see
+    :func:`gtin14`.
     """
     qualifiers = {"10": lot, "21": serial}
-    path = "/01/" + str(gtin).strip()
+    path = "/01/" + gtin14(gtin)
     for ai in QUALIFIER_ORDER:
         value = qualifiers.get(ai)
         if value:
