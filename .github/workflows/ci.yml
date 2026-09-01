@@ -99,48 +99,87 @@ jobs:
         with:
           path: addons/openepcis-odoo
 
-      # The events addon declares epcis-event-hash-generator as an external
-      # dependency (it recognises our own events coming back by their canonical
-      # hash). Without it Odoo lists the addon as uninstallable and every test
-      # in it is silently skipped rather than failed — the worst of both.
-      # --no-deps, and not by preference: the package declares Flask, Flask wants
-      # a newer Werkzeug, and pip cannot uninstall the Debian-packaged Werkzeug
-      # that Odoo itself runs on ("RECORD file not found"). Replacing Odoo's
-      # Werkzeug to satisfy a dependency the package never imports would be the
-      # wrong trade. Its real imports are pyld and dateutil, and those are
-      # installed with their own chains.
-      - name: Install the canonical hash generator
-        run: |
-          pip3 install --no-cache-dir --break-system-packages PyLD python-dateutil
-          pip3 install --no-cache-dir --break-system-packages --no-deps \
-            "epcis-event-hash-generator==1.9.3"
-
-      # Both bridge addons carry auto_install, so Odoo would decide for itself
-      # whether they apply — and in a bare database neither Manufacturing nor
-      # Point of Sale is there to trigger them. Naming them explicitly pulls
-      # mrp and point_of_sale in with them and puts their tests in the run;
-      # without that their code would only ever be imported, never executed.
       - name: Install and run the test suite
-        run: |
-          odoo -d ci \
-            -i openepcis_connector,openepcis_connector_stock,openepcis_connector_product_expiry,openepcis_connector_events,openepcis_connector_events_mrp,openepcis_connector_events_pos \
-            --addons-path=/usr/lib/python3/dist-packages/odoo/addons,${GITHUB_WORKSPACE}/addons/openepcis-odoo \
-            --db_host=db --db_user=odoo --db_password=odoo \
-            --data-dir=/tmp/odoo-data \
-            --test-enable --test-tags /openepcis_connector,/openepcis_connector_stock,/openepcis_connector_product_expiry,/openepcis_connector_events,/openepcis_connector_events_mrp,/openepcis_connector_events_pos \
-            --stop-after-init --log-level=test 2>&1 | tee odoo.log
+        run: sh addons/openepcis-odoo/tools/ci-run-tests.sh "$GITHUB_WORKSPACE/addons/openepcis-odoo"
 
-      - name: Fail on any failed test
+  # Which branch is the counterpart? Asked of the manifests, not written into
+  # this file — a workflow that names the other release would itself become a
+  # difference between the branches, and fewer of those is the whole point.
+  port-target:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      branch: ${{ steps.pick.outputs.branch }}
+      release: ${{ steps.pick.outputs.release }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: pick
+        run: python3 tools/check-release-idioms.py --other >> "$GITHUB_OUTPUT"
+
+  port-check:
+    # Does this change still work on the other branch?
+    #
+    # One branch per Odoo release means every change has to land on both, and
+    # the last time that was left to a later port it accumulated 63 commits and
+    # four API breaks. This carries the change onto the counterpart while the
+    # author still has the context, and runs the suite there. A red port check
+    # does not mean the change is wrong — it means the other branch needs its
+    # own version of it, which is far cheaper to write now than in three months.
+    #
+    # Advisory until 2026-09-15: drop continue-on-error after that, once the
+    # branches have stayed in step through a few ordinary changes.
+    continue-on-error: true
+    needs: port-target
+    runs-on: ubuntu-latest
+    container:
+      image: odoo:${{ needs.port-target.outputs.release }}
+      options: --user root
+    services:
+      db:
+        image: postgres:16
+        env:
+          POSTGRES_USER: odoo
+          POSTGRES_PASSWORD: odoo
+          POSTGRES_DB: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      # The odoo image ships no git, and checkout would silently fall back to a
+      # tarball with no history — which cannot be merged onto anything.
+      - name: git, for the merge
         run: |
-          # Odoo exits 0 even when tests fail, so the log is the source of truth.
-          if grep -qE "[0-9]+ failed, [0-9]+ error\(s\)" odoo.log \
-             && ! grep -q "0 failed, 0 error(s)" odoo.log; then
-            echo "::error::Odoo reported failing tests"
-            grep -E "(FAIL|ERROR):" odoo.log || true
-            exit 1
-          fi
-          grep -q "0 failed, 0 error(s)" odoo.log || {
-            echo "::error::No test summary in the log — the run did not complete"
-            tail -50 odoo.log
+          apt-get update -qq
+          apt-get install -y -qq git
+
+      - uses: actions/checkout@v5
+        with:
+          path: addons/openepcis-odoo
+          fetch-depth: 0
+
+      - name: Carry this change onto ${{ needs.port-target.outputs.branch }}
+        working-directory: addons/openepcis-odoo
+        env:
+          OTHER: ${{ needs.port-target.outputs.branch }}
+        run: |
+          git config user.email ci@openepcis.invalid
+          git config user.name "CI"
+          git fetch --quiet origin "$OTHER"
+          git checkout --quiet -b port-check "origin/$OTHER"
+          git merge --no-edit ${{ github.event.pull_request.head.sha }} || {
+            echo "::error::This change does not carry onto $OTHER without conflicts."
+            git --no-pager diff --diff-filter=U --name-only
             exit 1
           }
+
+      # The counterpart has to agree with itself too. This is where a constraint
+      # written in 18's idiom and merged onto 19 is caught — the form 19 accepts,
+      # warns about once, and then ignores.
+      - name: The other branch's idioms
+        working-directory: addons/openepcis-odoo
+        run: python3 tools/check-release-idioms.py
+
+      - name: Install and run the test suite there
+        run: sh addons/openepcis-odoo/tools/ci-run-tests.sh "$GITHUB_WORKSPACE/addons/openepcis-odoo"
