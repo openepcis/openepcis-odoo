@@ -1,0 +1,20 @@
+# Part of the OpenEPCIS connector for Odoo. See LICENSE (LGPL-3).
+# Keeps the build context of docker/demo/Containerfile small: only the addon
+# is copied into the image, everything else stays out of the context.
+# (podman reads .containerignore; docker would want a .dockerignore copy.)
+.git
+.github
+.gitignore
+.ruff_cache
+doc
+docs
+docker-compose.yml
+pyproject.toml
+tools
+**/__pycache__
+**/*.pyc
+openepcis_connector/tests
+openepcis_connector_stock/tests
+openepcis_connector_product_expiry/tests
+openepcis_connector_events/tests
+openepcis_connector_events_pos/tests

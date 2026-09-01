@@ -93,11 +93,13 @@ class TestKeyPool(OpenepcisCase):
         product._openepcis_sync()
 
         paths = [call["path"] for call in calls]
-        self.assertIn("/products/%s" % DRAWN, paths)
+        # The catalog resource spells a GTIN with fourteen digits; the GS1.de
+        # key registry below is a different API and keeps the drawn form.
+        self.assertIn("/products/0%s" % DRAWN, paths)
         self.assertIn("/gs1de/keys/01/%s/confirm" % DRAWN, paths)
         # Order matters: the record must exist before GS1 is told about the key.
         self.assertLess(
-            paths.index("/products/%s" % DRAWN),
+            paths.index("/products/0%s" % DRAWN),
             paths.index("/gs1de/keys/01/%s/confirm" % DRAWN),
         )
         self.assertEqual(product.openepcis_key_state, "registered")

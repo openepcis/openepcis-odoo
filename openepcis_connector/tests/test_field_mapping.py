@@ -9,7 +9,7 @@ registry, so they are pinned.
 
 from odoo.tests import tagged
 
-from .common import TEST_GTIN, OpenepcisCase
+from .common import TEST_GTIN_14, OpenepcisCase
 
 
 @tagged("post_install", "-at_install")
@@ -103,7 +103,7 @@ class TestFieldMapping(OpenepcisCase):
     def test_key_is_added_by_the_mixin_not_the_mapping(self):
         product = self._product()
         self.assertNotIn("gtin", self._payload(product))
-        self.assertEqual(product._openepcis_payload()["gtin"], TEST_GTIN)
+        self.assertEqual(product._openepcis_payload()["gtin"], TEST_GTIN_14)
 
     def test_a_unit_without_a_cefact_code_is_not_published_silently(self):
         # Odoo does not ship a UN/CEFACT code for every unit it ships. A

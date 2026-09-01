@@ -1,0 +1,7 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_openepcis_event_stock_user,openepcis.event.stock.user,model_openepcis_event,stock.group_stock_user,1,0,0,0
+access_openepcis_event_manager,openepcis.event.manager,model_openepcis_event,stock.group_stock_manager,1,1,0,0
+access_openepcis_event_system,openepcis.event.system,model_openepcis_event,base.group_system,1,1,1,1
+access_openepcis_inbound_event_stock_user,openepcis.inbound.event.stock.user,model_openepcis_inbound_event,stock.group_stock_user,1,0,0,0
+access_openepcis_inbound_event_manager,openepcis.inbound.event.manager,model_openepcis_inbound_event,stock.group_stock_manager,1,1,0,0
+access_openepcis_inbound_event_system,openepcis.inbound.event.system,model_openepcis_inbound_event,base.group_system,1,1,1,1

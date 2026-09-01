@@ -5,8 +5,11 @@
 #
 # To run the test suite instead of a server:
 #
-#   docker compose run --rm odoo odoo -d test -i openepcis_connector \
-#     --test-enable --test-tags /openepcis_connector --stop-after-init
+#   docker compose run --rm odoo odoo -d test \
+#     -i openepcis_connector,openepcis_connector_stock,openepcis_connector_product_expiry \
+#     --test-enable \
+#     --test-tags /openepcis_connector,/openepcis_connector_stock,/openepcis_connector_product_expiry \
+#     --stop-after-init
 #
 # Works with podman-compose as well.
 

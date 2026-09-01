@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+  <!--
+    Default mapping for lots and serial numbers.
+
+    noupdate="1" for the same reason as the product rows: these are starting
+    points an administrator adjusts, and an upgrade must not undo the change.
+
+    The first two rows read *across* to the product, because the resolver
+    validates every instance document against the full product schema —
+    productName, brand and gtin are required at every level. The dates that
+    make an instance document worth having (expiry, best before) live in the
+    product_expiry module and are shipped by the openepcis_connector_product_expiry
+    bridge, so a database without that module never carries rows pointing at
+    fields it does not have.
+  -->
+  <data noupdate="1">
+
+    <record id="mapping_lot_product_name" model="openepcis.field.mapping">
+      <field name="model_name">stock.lot</field>
+      <field name="odoo_field">product_id.name</field>
+      <field name="gs1_path">productName</field>
+      <field name="value_type">localized</field>
+      <field name="sequence">10</field>
+      <field name="note">The catalog validates instance documents against the product schema, which requires a name. Read from the product.</field>
+    </record>
+
+    <record id="mapping_lot_brand" model="openepcis.field.mapping">
+      <field name="model_name">stock.lot</field>
+      <field name="odoo_field">product_id.openepcis_brand_name</field>
+      <field name="gs1_path">brand.brandName</field>
+      <field name="value_type">localized</field>
+      <field name="sequence">20</field>
+      <field name="note">Required by the product schema at every level. Read from the product.</field>
+    </record>
+
+    <record id="mapping_lot_production_date" model="openepcis.field.mapping">
+      <field name="model_name">stock.lot</field>
+      <field name="odoo_field">create_date</field>
+      <field name="gs1_path">productionDate</field>
+      <field name="value_type">date</field>
+      <field name="sequence">30</field>
+      <field name="note">When the lot record was created in Odoo — a stand-in for the real production date. Repoint it if you track manufacturing dates, deactivate it if the stand-in is not good enough.</field>
+    </record>
+
+  </data>
+</odoo>

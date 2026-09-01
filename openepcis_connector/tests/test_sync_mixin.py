@@ -12,7 +12,7 @@ from odoo.tests import tagged
 
 from ..models.openepcis_sync_mixin import MAX_ATTEMPTS
 from ..utils.exceptions import OpenepcisError
-from .common import TEST_GTIN, TEST_GTIN_2, OpenepcisCase
+from .common import TEST_GTIN_2, TEST_GTIN_14, OpenepcisCase
 
 
 @tagged("post_install", "-at_install")
@@ -70,7 +70,7 @@ class TestPublishing(OpenepcisCase):
 
         self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0]["method"], "PUT")
-        self.assertEqual(calls[0]["path"], "/products/%s" % TEST_GTIN)
+        self.assertEqual(calls[0]["path"], "/products/%s" % TEST_GTIN_14)
         self.assertEqual(product.openepcis_state, "synced")
         self.assertTrue(product.openepcis_last_sync)
 
@@ -89,7 +89,9 @@ class TestPublishing(OpenepcisCase):
         product = self._product()
         product.openepcis_publish = True
         product._openepcis_sync()
-        self.assertEqual(calls[0]["payload"]["gtin"], TEST_GTIN)
+        # Body und Pfad muessen dieselbe Schreibweise tragen, sonst legt der
+        # Katalog zwei Ressourcen fuer ein Produkt an.
+        self.assertEqual(calls[0]["payload"]["gtin"], TEST_GTIN_14)
 
     def test_a_bad_check_digit_is_caught_before_any_call(self):
         calls = self.capture()
@@ -167,7 +169,7 @@ class TestDigitalLink(OpenepcisCase):
 
         product._openepcis_sync()
         self.assertEqual(
-            product.openepcis_digital_link, "https://id.example.test/01/%s" % TEST_GTIN
+            product.openepcis_digital_link, "https://id.example.test/01/%s" % TEST_GTIN_14
         )
 
     def test_opening_an_unpublished_link_explains_itself(self):

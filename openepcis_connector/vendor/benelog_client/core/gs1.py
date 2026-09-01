@@ -115,6 +115,29 @@ def clean(raw: object) -> str:
     return _PADDING.sub("", str(raw)).strip()
 
 
+def gtin14(raw: object) -> str:
+    """A GTIN in the fourteen-digit form every GS1 address spells it in.
+
+    A GTIN-13 (the ordinary EAN), a GTIN-12 or a GTIN-8 are the same identifier
+    written shorter. Wherever a GTIN becomes part of an address — the AI 01
+    segment of a Digital Link, the catalog resource ``/products/{gtin}`` — it is
+    the padded form, and two systems that disagree about the padding write the
+    same product to two different places.
+
+    The check digit stays where it is; padding is definitionally zero-fill on
+    the left. The value is cleaned first, like every other key helper here, so
+    the spaces and hyphens people type into a barcode field do not count as
+    length. What is then still not a plain digit string comes back cleaned and
+    unpadded: it is not a GTIN, and inventing digits in front of it would be
+    worse than handing it on. This pads, it does not judge — validate with
+    :func:`problem_with`.
+    """
+    digits = clean(raw)
+    if not digits.isdigit() or len(digits) >= 14:
+        return digits
+    return digits.zfill(14)
+
+
 def problem_with(raw: object, kind: str) -> KeyProblem | None:
     """Why this value is not a usable key of that type, or ``None`` if it is.
 
@@ -152,12 +175,18 @@ def digital_link(base_url: str, ai: str, key: object) -> str:
     ``https://id.example.org/01/09521234567890``. No qualifiers: publication
     happens at model level, where the key alone is the whole identity.
 
+    AI 01 is written with fourteen digits — a Digital Link addresses a GTIN in
+    its padded form, whatever length the barcode on the product has. Other AIs
+    keep their own length: a GLN under AI 414 is thirteen digits and padding it
+    would invent a location.
+
     Returns an empty string when any part is missing, so that a half-built URI
     never reaches a form or a label.
     """
     if not base_url or not ai or not key:
         return ""
-    return "{}/{}/{}".format(base_url.rstrip("/"), ai, clean(key))
+    value = gtin14(key) if str(ai) == ANCHOR_AI["GTIN"] else clean(key)
+    return "{}/{}/{}".format(base_url.rstrip("/"), ai, value)
 
 
 def language_tag(locale: str | None) -> str:
