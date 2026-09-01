@@ -23,6 +23,8 @@ from .document import (
     sgln,
     sscc_uri,
     stamp_event_ids,
+    transaction_event,
+    transformation_event,
 )
 from .service import Capture, CaptureOutcome, CaptureReceipt, EventPage, Query
 
@@ -46,4 +48,6 @@ __all__ = [
     "sgln",
     "sscc_uri",
     "stamp_event_ids",
+    "transaction_event",
+    "transformation_event",
 ]

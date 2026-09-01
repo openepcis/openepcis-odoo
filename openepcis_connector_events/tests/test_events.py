@@ -338,6 +338,116 @@ class TestDelivery(EventCase):
 
 
 @tagged("post_install", "-at_install")
+class TestReturns(EventCase):
+    """What a return says about the shipment the goods went out on."""
+
+    def _delivery(self, product, partner):
+        self.env["stock.quant"]._update_available_quantity(product, self.warehouse.lot_stock_id, 5)
+        return self._transfer(self._outgoing_type(), product, quantity=2, partner=partner)
+
+    def _return_of(self, delivery):
+        """The return Odoo's own wizard would build."""
+        picking = self.env["stock.picking"].create(
+            {
+                "picking_type_id": self._incoming_type().id,
+                "location_id": self.customer_location.id,
+                "location_dest_id": self.warehouse.lot_stock_id.id,
+                "partner_id": delivery.partner_id.id,
+                "origin": "Return of %s" % delivery.name,
+                "return_id": delivery.id,
+                "move_ids": [
+                    (
+                        0,
+                        0,
+                        {
+                            "name": move.product_id.name,
+                            "product_id": move.product_id.id,
+                            "product_uom_qty": 2,
+                            "product_uom": move.product_uom.id,
+                        },
+                    )
+                    for move in delivery.move_ids
+                ],
+            }
+        )
+        picking.action_confirm()
+        picking.action_assign()
+        for line in picking.move_line_ids:
+            line.quantity = 2
+        picking.move_ids.picked = True
+        picking.button_validate()
+        return picking
+
+    def _events_of_type(self, kind):
+        import json
+
+        return [
+            event
+            for row in self._queued()
+            for event in json.loads(row.payload)["epcisBody"]["eventList"]
+            if event["type"] == kind
+        ]
+
+    def test_returned_goods_leave_the_shipment_they_went_out_on(self):
+        """A receipt says they arrived, not that they left the despatch advice.
+
+        The association is a standing statement: until something withdraws it,
+        the shipment answers with goods that have long since come back.
+        """
+        partner = self.env["res.partner"].create(
+            {"name": "A customer", "openepcis_gln": TEST_PARTNER_GLN}
+        )
+        product = self._published_product(tracking="none")
+        product.product_tmpl_id.is_storable = True
+        delivery = self._delivery(product, partner)
+        shipped_under = self._events_of_type("ObjectEvent")[0]["bizTransactionList"]
+        self._queued().sudo().unlink()
+
+        self._return_of(delivery)
+
+        releases = self._events_of_type("TransactionEvent")
+        self.assertEqual(len(releases), 1)
+        self.assertEqual(releases[0]["action"], "DELETE")
+        self.assertEqual(releases[0]["disposition"], "returned")
+        # The very document the goods went out under, not the return's own.
+        self.assertEqual(releases[0]["bizTransactionList"], shipped_under)
+
+    def test_the_arrival_is_still_reported_as_its_own_event(self):
+        """Two different statements, and the return makes both."""
+        partner = self.env["res.partner"].create(
+            {"name": "A customer", "openepcis_gln": TEST_PARTNER_GLN}
+        )
+        product = self._published_product(tracking="none")
+        product.product_tmpl_id.is_storable = True
+        delivery = self._delivery(product, partner)
+        self._queued().sudo().unlink()
+
+        self._return_of(delivery)
+
+        self.assertEqual(len(self._events_of_type("ObjectEvent")), 1)
+        self.assertEqual(len(self._events_of_type("TransactionEvent")), 1)
+
+    def test_an_ordinary_receipt_releases_nothing(self):
+        """Only a return releases. A receipt is not a return of anything."""
+        product = self._published_product(tracking="none")
+        self._transfer(self._incoming_type(), product)
+
+        self.assertEqual(self._events_of_type("TransactionEvent"), [])
+
+    def test_a_return_of_paperless_goods_releases_nothing(self):
+        """An internal transfer names no document, so there is nothing to leave."""
+        product = self._published_product(tracking="none")
+        product.product_tmpl_id.is_storable = True
+        self.env["stock.quant"]._update_available_quantity(product, self.warehouse.lot_stock_id, 5)
+        internal = self._transfer(self._internal_type(), product, quantity=1)
+        self._queued().sudo().unlink()
+
+        self._return_of(internal)
+
+        self.assertEqual(self._events_of_type("TransactionEvent"), [])
+
+
+@tagged("post_install", "-at_install")
 class TestAggregation(EventCase):
     def test_packing_into_a_unit_says_what_is_underneath_it(self):
         product = self._published_product(tracking="serial")
@@ -388,6 +498,225 @@ class TestAggregation(EventCase):
         self.assertEqual(
             aggregations[0]["childEPCs"],
             ["https://id.gs1.org/01/%s/21/952-0100" % TEST_GTIN_14],
+        )
+
+    def _aggregations(self):
+        import json
+
+        return [
+            event
+            for row in self._queued()
+            for event in json.loads(row.payload)["epcisBody"]["eventList"]
+            if event["type"] == "AggregationEvent"
+        ]
+
+    def _stocked_serial(self, product, serial, package):
+        """One serial of ``product``, in stock and inside ``package``."""
+        picking = self._transfer_into_package(product, serial, package)
+        self._queued().sudo().unlink()
+        picking.message_ids.unlink()
+        return picking
+
+    def _transfer_into_package(self, product, serial, package):
+        picking = self.env["stock.picking"].create(
+            {
+                "picking_type_id": self._incoming_type().id,
+                "location_id": self.supplier_location.id,
+                "location_dest_id": self.warehouse.lot_stock_id.id,
+                "move_ids": [
+                    (
+                        0,
+                        0,
+                        {
+                            "name": product.name,
+                            "product_id": product.id,
+                            "product_uom_qty": 1,
+                            "product_uom": product.uom_id.id,
+                        },
+                    )
+                ],
+            }
+        )
+        picking.action_confirm()
+        picking.action_assign()
+        for line in picking.move_line_ids:
+            line.quantity = 1
+            line.lot_name = serial
+            line.result_package_id = package
+        picking.move_ids.picked = True
+        picking.button_validate()
+        return picking
+
+    def test_picking_goods_off_a_pallet_says_the_unit_lost_them(self):
+        """An aggregation is a standing statement, so it has to be withdrawn.
+
+        Scan the SSCC and the repository answers what is underneath it. A unit
+        that is emptied and never says so keeps answering with goods that are
+        no longer in it — and the operation types could be labelled
+        ``unpacking`` all along, which made the missing half easy to overlook.
+        """
+        product = self._published_product(tracking="serial")
+        product.product_tmpl_id.is_storable = True
+        package = self.env["stock.quant.package"].create({})
+        self._stocked_serial(product, "952-0200", package)
+
+        picking = self.env["stock.picking"].create(
+            {
+                "picking_type_id": self._outgoing_type().id,
+                "location_id": self.warehouse.lot_stock_id.id,
+                "location_dest_id": self.customer_location.id,
+                "move_ids": [
+                    (
+                        0,
+                        0,
+                        {
+                            "name": product.name,
+                            "product_id": product.id,
+                            "product_uom_qty": 1,
+                            "product_uom": product.uom_id.id,
+                        },
+                    )
+                ],
+            }
+        )
+        picking.action_confirm()
+        picking.action_assign()
+        # Off the pallet and into the van: the goods come out of the unit and
+        # go into none. That is what a picker does, and what the move line
+        # says afterwards.
+        for line in picking.move_line_ids:
+            line.quantity = 1
+            line.package_id = package
+            line.result_package_id = False
+        picking.move_ids.picked = True
+        picking.button_validate()
+
+        aggregations = self._aggregations()
+        self.assertEqual(len(aggregations), 1, [e.get("bizStep") for e in aggregations])
+        self.assertEqual(aggregations[0]["action"], "DELETE")
+        self.assertEqual(aggregations[0]["bizStep"], "unpacking")
+        self.assertEqual(
+            aggregations[0]["parentID"], "https://id.gs1.org/00/%s" % package.openepcis_sscc
+        )
+
+    def test_the_unpack_button_says_it_too(self):
+        """The everyday way of emptying a pallet leaves no transfer at all.
+
+        Odoo has two: picking goods off it in a delivery, which leaves move
+        lines, and this button, which clears the package on the quants and is
+        done. Reporting only the first would tell the repository about the
+        rarer of the two.
+        """
+        product = self._published_product(tracking="serial")
+        product.product_tmpl_id.is_storable = True
+        package = self.env["stock.quant.package"].create({})
+        self._stocked_serial(product, "952-0202", package)
+
+        package.unpack()
+
+        aggregations = self._aggregations()
+        self.assertEqual(len(aggregations), 1, [e.get("bizStep") for e in aggregations])
+        self.assertEqual(aggregations[0]["action"], "DELETE")
+        self.assertEqual(aggregations[0]["bizStep"], "unpacking")
+        self.assertEqual(
+            aggregations[0]["parentID"], "https://id.gs1.org/00/%s" % package.openepcis_sscc
+        )
+        self.assertEqual(
+            aggregations[0]["childEPCs"],
+            ["https://id.gs1.org/01/%s/21/952-0202" % TEST_GTIN_14],
+        )
+
+    def test_unpacking_an_empty_unit_says_nothing(self):
+        package = self.env["stock.quant.package"].create({})
+
+        package.unpack()
+
+        self.assertEqual(self._aggregations(), [])
+
+    def test_a_unit_that_only_moves_is_neither_packed_nor_unpacked(self):
+        """Reporting a move as a packing would restate what never changed."""
+        product = self._published_product(tracking="serial")
+        product.product_tmpl_id.is_storable = True
+        package = self.env["stock.quant.package"].create({})
+        self._stocked_serial(product, "952-0201", package)
+
+        picking = self.env["stock.picking"].create(
+            {
+                "picking_type_id": self._outgoing_type().id,
+                "location_id": self.warehouse.lot_stock_id.id,
+                "location_dest_id": self.customer_location.id,
+                "move_ids": [
+                    (
+                        0,
+                        0,
+                        {
+                            "name": product.name,
+                            "product_id": product.id,
+                            "product_uom_qty": 1,
+                            "product_uom": product.uom_id.id,
+                        },
+                    )
+                ],
+            }
+        )
+        picking.action_confirm()
+        picking.action_assign()
+        for line in picking.move_line_ids:
+            line.quantity = 1
+            line.result_package_id = line.package_id
+        picking.move_ids.picked = True
+        picking.button_validate()
+
+        self.assertEqual(self._aggregations(), [], "the pallet moved, it was not repacked")
+
+    def test_two_units_of_the_same_lot_are_two_events(self):
+        """The unit belongs in the outbox key, or the second one disappears.
+
+        Two pallets of the same lot state the same contents. Keyed on the
+        contents alone, the second event met the first one's row and was
+        dropped without a word.
+        """
+        product = self._published_product(tracking="lot")
+        product.product_tmpl_id.is_storable = True
+        first = self.env["stock.quant.package"].create({})
+        second = self.env["stock.quant.package"].create({})
+
+        picking = self.env["stock.picking"].create(
+            {
+                "picking_type_id": self._incoming_type().id,
+                "location_id": self.supplier_location.id,
+                "location_dest_id": self.warehouse.lot_stock_id.id,
+                "move_ids": [
+                    (
+                        0,
+                        0,
+                        {
+                            "name": product.name,
+                            "product_id": product.id,
+                            "product_uom_qty": 2,
+                            "product_uom": product.uom_id.id,
+                        },
+                    )
+                ],
+            }
+        )
+        picking.action_confirm()
+        picking.action_assign()
+        line = picking.move_line_ids[0]
+        line.quantity = 1
+        line.lot_name = "BATCH-TWO-PALLETS"
+        line.result_package_id = first
+        second_line = line.copy({"quantity": 1, "result_package_id": second.id})
+        second_line.lot_name = "BATCH-TWO-PALLETS"
+        picking.move_ids.picked = True
+        picking.button_validate()
+
+        parents = sorted(event["parentID"] for event in self._aggregations())
+        self.assertEqual(
+            parents,
+            sorted(
+                "https://id.gs1.org/00/%s" % package.openepcis_sscc for package in (first, second)
+            ),
         )
 
     def test_a_new_package_is_given_an_sscc_from_the_company_prefix(self):

@@ -144,6 +144,69 @@ class TestInbox(EventCase):
 
         self.assertEqual(self._rows().state, "unmatched")
 
+    def test_a_lot_named_in_a_quantity_list_is_found(self):
+        """Class level was invisible, and most of what suppliers send is class level.
+
+        A lot travels as an ``epcClass`` in a quantity list and never in an EPC
+        list. The inbox read only the EPC lists, so an event describing our
+        goods precisely went by as an unknown identifier.
+        """
+        product = self._published_product(tracking="lot")
+        lot = self._lot("LOT-952-Q", product)
+        body = event("urn:uuid:q1", party=TEST_PARTNER_GLN)
+        body["epcList"] = []
+        body["quantityList"] = [
+            {
+                "epcClass": "https://id.gs1.org/01/0%s/10/%s" % (product.barcode, lot.name),
+                "quantity": 12,
+            }
+        ]
+        self.query.pages = [[body]]
+
+        self._poll()
+
+        row = self._rows()
+        self.assertEqual(row.res_model, "stock.lot")
+        self.assertEqual(row.res_id, lot.id)
+
+    def test_ours_is_found_even_when_it_is_not_named_first(self):
+        """A transformation names a mixture, and ours is rarely the first of it."""
+        product = self._published_product(tracking="lot")
+        lot = self._lot("LOT-952-M", product)
+        body = event("urn:uuid:m1", party=TEST_PARTNER_GLN)
+        body["type"] = "TransformationEvent"
+        body.pop("action", None)
+        body["epcList"] = []
+        body["inputEPCList"] = [
+            "https://id.gs1.org/01/04012345123456/21/SOMEBODY-ELSE",
+            "https://id.gs1.org/01/0%s/10/%s" % (product.barcode, lot.name),
+        ]
+        body["outputEPCList"] = ["https://id.gs1.org/01/04012345123456/21/THEIR-OUTPUT"]
+        self.query.pages = [[body]]
+
+        self._poll()
+
+        row = self._rows()
+        self.assertEqual(row.res_id, lot.id)
+        self.assertEqual(row.event_type, "TransformationEvent")
+
+    def test_a_transformation_says_what_the_goods_became(self):
+        """The one thing a reader of this lot cannot find out anywhere else."""
+        product = self._published_product(tracking="lot")
+        lot = self._lot("LOT-952-T", product)
+        body = event("urn:uuid:t1", party=TEST_PARTNER_GLN)
+        body["type"] = "TransformationEvent"
+        body["epcList"] = []
+        body["inputEPCList"] = ["https://id.gs1.org/01/0%s/10/%s" % (product.barcode, lot.name)]
+        body["outputEPCList"] = ["https://id.gs1.org/01/04012345123456/21/THEIR-OUTPUT"]
+        self.query.pages = [[body]]
+
+        self._poll()
+
+        said = " ".join(message.body or "" for message in lot.message_ids)
+        self.assertIn("went into", said)
+        self.assertIn("THEIR-OUTPUT", said)
+
     def test_an_identifier_this_database_does_not_know_stays_visible(self):
         self.query.pages = [[event("urn:uuid:2", epc="https://id.gs1.org/01/09521234999999/21/9")]]
         self._poll()

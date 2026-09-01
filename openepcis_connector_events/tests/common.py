@@ -8,7 +8,7 @@ tests are about is what was said, not that something was sent.
 
 from unittest.mock import patch
 
-from odoo.addons.openepcis_connector_stock.tests.common import TEST_GTIN, LotCase
+from odoo.addons.openepcis_connector_stock.tests.common import TEST_GTIN, TEST_GTIN_2, LotCase
 
 # The class that *defines* the method, not the one the model is named after:
 # Odoo merges both into one model, and a patch has to land where the
@@ -214,6 +214,10 @@ class EventCase(LotCase):
         picking_type.use_existing_lots = True
         return picking_type
 
+    def _internal_type(self):
+        """A move within the warehouse — it belongs to no document."""
+        return self.warehouse.int_type_id
+
     def _queued(self):
         return self.env["openepcis.event"].search([])
 
@@ -223,6 +227,7 @@ class EventCase(LotCase):
 
 __all__ = [
     "TEST_GTIN",
+    "TEST_GTIN_2",
     "TEST_GLN",
     "TEST_GLN_DOCK",
     "TEST_PARTNER_GLN",

@@ -58,6 +58,13 @@ class OpenepcisInboundEvent(models.Model):
         help="When the repository wrote it. This, not the event time, is what the "
         "catch-up walks forward on.",
     )
+    event_type = fields.Char(
+        string="Event type",
+        readonly=True,
+        index=True,
+        help="ObjectEvent, AggregationEvent, TransactionEvent, TransformationEvent. "
+        "What kind of statement this is, which the business step alone does not say.",
+    )
     biz_step = fields.Char(string="Business step", readonly=True)
     disposition = fields.Char(readonly=True)
     party_gln = fields.Char(string="Reported by", readonly=True)
@@ -202,13 +209,18 @@ class OpenepcisInboundEvent(models.Model):
         scope = company.sudo().openepcis_inbound_scope or "all"
         if scope == "all":
             return True
-        identifier = self._first_identifier(event)
-        parts = self._parse_identifier(identifier)
-        if not parts:
+        # Every identifier, not the first one. An event about a mixture — a
+        # transformation above all — names goods from several suppliers, and
+        # ours being third in the list is not a reason to drop it.
+        readable = [
+            parts
+            for parts in (self._parse_identifier(i) for i in self._identifiers(event))
+            if parts
+        ]
+        if not readable:
             # Nothing we can read is nothing we can place, and a narrowed scope
             # is a request not to be shown that.
             return False
-        kind, key, _qualifier = parts
         if scope == "own_gcp":
             prefix = (company.sudo().openepcis_gcp or "").strip()
             if not prefix:
@@ -220,8 +232,8 @@ class OpenepcisInboundEvent(models.Model):
                     company.display_name,
                 )
                 return True
-            return self._bears_prefix(kind, key, prefix)
-        return bool(self.sudo()._subject_of(kind, key, _qualifier))
+            return any(self._bears_prefix(kind, key, prefix) for kind, key, _q in readable)
+        return any(self.sudo()._subject_of(*parts) for parts in readable)
 
     @staticmethod
     def _bears_prefix(kind, key, prefix):
@@ -310,6 +322,7 @@ class OpenepcisInboundEvent(models.Model):
                 "event_uuid": uuid,
                 "event_time": self._naive_utc(event.get("eventTime")),
                 "record_time": self._naive_utc(event.get("recordTime")),
+                "event_type": event.get("type"),
                 "biz_step": event.get("bizStep"),
                 "disposition": event.get("disposition"),
                 "party_gln": self._reported_by(event),
@@ -398,27 +411,103 @@ class OpenepcisInboundEvent(models.Model):
         self.ensure_one()
         if not hasattr(record, "message_post"):
             return
-        record.sudo().message_post(
-            body=_(
-                "EPCIS: %(party)s reported %(step)s on %(when)s.",
-                party=self.party_gln or _("a partner"),
-                step=self.biz_step or _("an event"),
-                when=self.event_time or _("an unstated date"),
-            )
-        )
+        record.sudo().message_post(body=self._openepcis_news())
         self.sudo().write({"state": "posted"})
+
+    def _openepcis_news(self):
+        """The sentence to leave on the record, in the words the event deserves.
+
+        A transformation is worth its own sentence. "A partner reported
+        commissioning" is true of it and says nothing: what happened is that
+        these goods stopped being themselves and became something else, and the
+        something else is named in the event. That is the one thing a reader of
+        this lot cannot find out anywhere else — the chain continues, and this
+        is where it continues to.
+        """
+        self.ensure_one()
+        party = self.party_gln or _("a partner")
+        when = self.event_time or _("an unstated date")
+        if self.event_type == "TransformationEvent":
+            became = self._transformation_outputs()
+            if became:
+                return _(
+                    "EPCIS: %(party)s reports that these goods went into %(outputs)s on %(when)s.",
+                    party=party,
+                    outputs=", ".join(became),
+                    when=when,
+                )
+            return _(
+                "EPCIS: %(party)s reports that these goods were transformed on "
+                "%(when)s, without naming what came out.",
+                party=party,
+                when=when,
+            )
+        return _(
+            "EPCIS: %(party)s reported %(step)s on %(when)s.",
+            party=party,
+            step=self.biz_step or _("an event"),
+            when=when,
+        )
+
+    def _transformation_outputs(self):
+        """What the event says came out, as identifiers."""
+        self.ensure_one()
+        try:
+            event = json.loads(self.payload or "{}")
+        except ValueError:
+            return []
+        outputs = list(event.get("outputEPCList") or [])
+        outputs.extend(
+            element.get("epcClass")
+            for element in (event.get("outputQuantityList") or [])
+            if element.get("epcClass")
+        )
+        return outputs
 
     # ------------------------------------------------------------------
     # Reading an event
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _first_identifier(event):
+    def _identifiers(event):
+        """Every identifier an event names, in the order it names them.
+
+        Both kinds, and that was the gap. Instance-level lists were read and
+        class-level ones were not, so an event about a *lot* — which travels as
+        an ``epcClass`` in a quantity list, never in an EPC list — was invisible
+        to this inbox however precisely it described our goods. Most of what a
+        food or pharma supplier reports is class level.
+
+        A transformation makes the same point from the other side: its inputs
+        are a mixture from several suppliers, so ours is rarely the first one
+        named. Reading only the first identifier meant reading somebody else's.
+        """
+        found = []
         for key in ("epcList", "childEPCs", "inputEPCList", "outputEPCList"):
-            values = event.get(key) or []
-            if values:
-                return values[0]
-        return event.get("parentID")
+            found.extend(event.get(key) or [])
+        for key in ("quantityList", "inputQuantityList", "outputQuantityList", "childQuantityList"):
+            found.extend(
+                element.get("epcClass")
+                for element in (event.get(key) or [])
+                if element.get("epcClass")
+            )
+        if event.get("parentID"):
+            found.append(event["parentID"])
+        return found
+
+    def _first_identifier(self, event):
+        """The identifier this database knows, or the first one if it knows none.
+
+        Preferring a known one is what makes an event about a mixture usable:
+        the row should be filed under the goods *we* can place, not under
+        whichever identifier the sender happened to list first.
+        """
+        identifiers = self._identifiers(event)
+        for identifier in identifiers:
+            parts = self._parse_identifier(identifier)
+            if parts and self.sudo()._subject_of(*parts):
+                return identifier
+        return identifiers[0] if identifiers else None
 
     @staticmethod
     def _sscc_of(identifier):
