@@ -277,6 +277,9 @@ docker compose run --rm odoo odoo -d test \
 
 # Lint and formatting, as CI runs them
 ruff check . && ruff format --check .
+
+# Does this branch agree with itself about which Odoo release it targets?
+python tools/check-release-idioms.py
 ```
 
 Odoo exits 0 even when tests fail, so the summary line in the log is the source of
@@ -317,6 +320,35 @@ with the same code and only the version-specific differences between them. Busin
 logic is deliberately version-neutral Python and the views avoid custom
 JavaScript — the GPC picker is a wizard rather than an autocomplete widget for
 exactly this reason — so a port stays cheap.
+
+In practice the two differ in exactly four places in the code, and it is worth knowing
+which, because only one direction of the mistake fails loudly.
+
+**Table constraints.** This branch uses `_sql_constraints`; Odoo 19 declares them as
+`models.Constraint`, which does not exist in 18. Moving the old form to 19 is the
+dangerous direction: 19 accepts it, warns about it once, and then **ignores** it, leaving
+a uniqueness rule uncreated — two contacts sharing one GLN, the same movement twice in
+the outbox — with nothing but a startup warning to say so. The other direction is
+harmless: 18 does not know `models.Constraint` and says so at once.
+
+Because only one of the two directions fails loudly, CI checks it rather than trusting
+a reviewer to notice. `tools/check-release-idioms.py` reads the target release from the
+addon manifests and refuses the old form on 19 and the new one on 18. It checks two more
+things a port gets wrong quietly: manifests that disagree with each other about the
+release, and a container tag still pointing at the other one.
+
+**The package model.** Odoo 19 renamed `stock.quant.package` to `stock.package` and let
+units nest inside one another. **The produced lot** on a manufacturing order became a
+Many2many, `lot_producing_ids`. And **a search group** on 19 takes neither `expand` nor
+`string`.
+
+Installing the wrong branch cannot happen quietly either. Odoo 18 refuses a manifest
+version of `19.0.x` outright, before it loads any Python.
+
+The units of measure look like a further difference and are not: Odoo 19 renamed some
+records (`product_uom_mm` became `product_uom_millimeter`) and added others
+(`product_uom_milliliter`). Both spellings are listed in one table and a name the
+running release does not have is skipped, so the same file serves both.
 
 ### About the screenshots
 
