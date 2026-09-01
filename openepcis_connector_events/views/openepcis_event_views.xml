@@ -86,7 +86,8 @@
         <separator/>
         <filter name="today" string="Today"
                 domain="[('event_time', '&gt;=', datetime.datetime.now().strftime('%Y-%m-%d 00:00:00'))]"/>
-        <group expand="0" string="Group by">
+        <!-- Odoo 19 allows neither expand nor string on a search group. -->
+        <group>
           <filter name="by_step" string="Business step" context="{'group_by': 'biz_step'}"/>
           <filter name="by_state" string="State" context="{'group_by': 'state'}"/>
         </group>
