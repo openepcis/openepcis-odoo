@@ -682,10 +682,15 @@ class TestNesting(EventCase):
     missing was never the vocabulary but the fact.
     """
 
-    def _stocked(self, package, serial="952-0301"):
-        """Give a unit something in it, so it has a location to be read at."""
-        product = self._published_product(tracking="serial")
-        product.product_tmpl_id.is_storable = True
+    def _stocked(self, package, serial="952-0301", product=None):
+        """Give a unit something in it, so it has a location to be read at.
+
+        ``product`` is passed in where a test needs two stocked units: two
+        products would want two barcodes, and one GTIN twice is rejected.
+        """
+        if product is None:
+            product = self._published_product(tracking="serial")
+            product.product_tmpl_id.is_storable = True
         self._stocked_serial(product, serial, package)
         return package
 
@@ -730,8 +735,10 @@ class TestNesting(EventCase):
         another. Reporting only the arrival would leave the first pallet
         answering with a case that is no longer on it.
         """
-        first = self._stocked(self.env["stock.package"].create({}), "952-0302")
-        second = self._stocked(self.env["stock.package"].create({}), "952-0303")
+        product = self._published_product(tracking="serial")
+        product.product_tmpl_id.is_storable = True
+        first = self._stocked(self.env["stock.package"].create({}), "952-0302", product)
+        second = self._stocked(self.env["stock.package"].create({}), "952-0303", product)
         case = self.env["stock.package"].create({"parent_package_id": first.id})
         self._queued().sudo().unlink()
 
