@@ -626,6 +626,34 @@ class TestAggregation(EventCase):
             ["https://id.gs1.org/01/%s/21/952-0202" % TEST_GTIN_14],
         )
 
+    def test_packing_and_unpacking_spell_the_quantity_the_same_way(self):
+        """One fact, one spelling — or the two events cannot be compared.
+
+        A quantity with no unit is read by EPCIS as a piece count, so the code
+        for pieces is left off. The unpack path used to state it while the
+        transfer path left it out, which described the same goods two ways.
+        The quantity element goes into the event hash, so the difference was
+        not cosmetic.
+        """
+        product = self._published_product(tracking="lot")
+        product.product_tmpl_id.is_storable = True
+        package = self.packages.create({})
+        picking = self._transfer_into_package(product, "BATCH-U", package)
+        packed = [event for event in self._aggregations() if event["action"] == "ADD"]
+        self.assertEqual(len(packed), 1, [e["action"] for e in self._aggregations()])
+        self._queued().sudo().unlink()
+        picking.message_ids.unlink()
+
+        package.unpack()
+
+        emptied = [e for e in self._aggregations() if e["action"] == "DELETE"]
+        self.assertEqual(len(emptied), 1)
+        self.assertEqual(
+            [q.get("uom") for q in emptied[0]["childQuantityList"]],
+            [q.get("uom") for q in packed[0]["childQuantityList"]],
+        )
+        self.assertNotIn("uom", emptied[0]["childQuantityList"][0])
+
     def test_unpacking_an_empty_unit_says_nothing(self):
         package = self.env["stock.quant.package"].create({})
 

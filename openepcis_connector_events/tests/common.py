@@ -224,6 +224,17 @@ class EventCase(LotCase):
     def _deliver(self):
         self.env["openepcis.event"]._cron_capture()
 
+    @property
+    def packages(self):
+        """The package model, whatever this release calls it.
+
+        Odoo 19 renamed ``stock.quant.package`` to ``stock.package``. Asking
+        the registry keeps a test identical on both branches, which is one
+        fewer thing to reconcile by hand every time the two are merged.
+        """
+        name = "stock.package" if "stock.package" in self.env else "stock.quant.package"
+        return self.env[name]
+
 
 __all__ = [
     "TEST_GTIN",
