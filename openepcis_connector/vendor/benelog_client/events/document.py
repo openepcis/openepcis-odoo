@@ -86,7 +86,7 @@ def gtin14(gtin: str) -> str:
     ``/01/9521234000013`` (thirteen digits, straight from ``product.barcode``)
     is accepted by the capture endpoint with a 202 and then **rejected** by the
     repository's validation with "Translation failed" — measured against
-    api.dev.epcis.cloud on 2026-08-30. The tests could not see it because they
+    a live repository on 2026-08-30. The tests could not see it because they
     built the expected identifier out of the same barcode field, so they
     asserted whatever the code produced.
 
