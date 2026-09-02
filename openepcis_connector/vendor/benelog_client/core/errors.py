@@ -56,9 +56,9 @@ class BenelogError(Exception):
         provisioning problem in Keycloak, and no edit to the record fixes it, so
         it deserves its own message in the host.
 
-        The substring match is a known fragility inherited from the observed
-        contract; replace it with a documented error code once the platform
-        publishes one (see docs/api/observed-contract.md in the Odoo repo).
+        The substring match is a known fragility: the platform publishes no
+        error code for this case, so the message is all there is to go on.
+        Replace it with a code the moment one exists.
         """
         return self.status == 400 and "carries no" in (self.message or "")
 
