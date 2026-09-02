@@ -3,58 +3,43 @@
 
 # Demo image
 
-Odoo 18 with the connector addons preinstalled — `openepcis_connector`, plus the
-`_stock` and `_product_expiry` bridges. This is the image the `demo-odoo`
-Terraform module in [openepcis-platform] deploys as a standing demo system on
-the dev cluster; the module's `image` variable defaults to the tag built here,
-and its module list installs the apps.
+Stock Odoo with all six connector addons preinstalled — the base connector, the
+`_stock` and `_product_expiry` bridges, the events addon, and the manufacturing
+and point-of-sale bridges. It exists so that a demo system, or a throwaway
+instance for a screenshot, can be started from one image instead of from a
+checkout.
 
-The image is stock `odoo:18` plus three `COPY` layers into
-`/mnt/extra-addons`, which is already on the official image's `addons_path`.
-Nothing is installed at build time: which apps a database gets is the
-deployment's decision, not the image's, and the two bridges carry `auto_install`
-so Odoo activates them by itself once `stock` and `product_expiry` are there.
+Nothing is installed at build time. Which apps a database gets is the
+deployment's decision, not the image's, and four of the addons carry
+`auto_install` — Odoo activates them by itself once the app they extend is
+there. An image without Manufacturing installed never activates the
+manufacturing bridge, and one without a till never reads a sale as a sale.
 
-## Where it lives
-
-```
-registry.company-group.com/openepcis/openepcis-connectors/odoo-demo:18
-```
-
-Under the openepcis-connectors project, beside the UnoPim demo image, although
-it is built from neither. A GitLab deploy token reaches exactly one project, and
-the dev cluster already holds one for that project in its
-`docker-registry-credentials` secret. Giving the demo images of the connector
-suite one registry path is a smaller thing to explain than a second credential
-in the namespace.
+The addons are copied into `/mnt/extra-addons`, which the official image
+already has on its `addons_path`. On top of that one `RUN` installs the
+canonical event-hash generator, which the events addon declares as an external
+dependency: without it Odoo lists that addon as uninstallable and every test in
+it is silently skipped.
 
 ## Build
 
-The build context is the **repo root**, so the addon directories are inside the
-context; `.containerignore` keeps everything else out — including the test
-suites, which have no business in a demo image.
-
-The dev cluster runs `amd64`; a build machine may not, and Odoo will not start
-from the wrong architecture. Pass `--platform` and check with
-`kubectl get nodes -L kubernetes.io/arch` if unsure:
+The build context is the **repo root**, so that the addon directories are inside
+it; `.containerignore` keeps everything else out — including the test suites,
+which have no business in a demo image.
 
 ```bash
-podman build --platform linux/amd64 -f docker/demo/Containerfile \
-  -t registry.company-group.com/openepcis/openepcis-connectors/odoo-demo:18 .
+podman build -f docker/demo/Containerfile -t odoo-demo:18 .
 ```
 
-No emulation is needed for a cross-architecture build here: the image only
-copies files, so nothing from the foreign base image is ever executed.
+Tag it for wherever you keep images, and push it there.
 
-## Push
+Two things to know before building for a different architecture than the build
+machine. Odoo will not start from the wrong one, so pass `--platform` to match
+the host that will run it. And that build does need emulation despite being
+mostly `COPY` layers: the `RUN` above executes `pip` from the foreign base
+image.
 
-```bash
-podman login registry.company-group.com   # needs write_registry
-podman push registry.company-group.com/openepcis/openepcis-connectors/odoo-demo:18
-```
-
-The build is deliberately **manual**. This repository's CI runs on GitHub while
-the registry is GitLab's, and a demo image is rebuilt when the addon changes
-enough to matter — a judgement, not an event worth wiring a pipeline for.
-
-[openepcis-platform]: https://code.company-group.com/openepcis/openepcis-platform
+The build is deliberately **manual**. This repository's CI installs the addons
+into a real Odoo and runs their tests on every pull request; a demo image is
+rebuilt when the addons change enough to matter, which is a judgement rather
+than an event worth wiring a pipeline for.

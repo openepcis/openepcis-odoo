@@ -1,12 +1,12 @@
 # Part of the OpenEPCIS connector for Odoo. See LICENSE (LGPL-3).
 #
-# Demo image for the demo-odoo Terraform module (openepcis-platform):
-# stock Odoo 18 with the connector addons preinstalled.
+# Demo image: stock Odoo with the connector addons preinstalled, for a demo
+# system or a throwaway instance.
 #
 # They ship together because they are one story: the connector publishes the
 # product, the stock bridge the lots and serials underneath it, the expiry
 # bridge the dates GS1 asks about on those lots, and the events addon what
-# became of them. Three carry auto_install, so Odoo decides for itself whether
+# became of them. Four carry auto_install, so Odoo decides for itself whether
 # they apply — an image without stock installed never activates the stock
 # bridge, and one without a till never reads a sale as a sale.
 #
@@ -16,10 +16,9 @@
 # Build from the repo root (the context must be the root so the addon
 # directories are inside it):
 #
-#   podman build --platform linux/amd64 -f docker/demo/Containerfile \
-#     -t registry.company-group.com/openepcis/openepcis-connectors/odoo-demo:18 .
+#   podman build -f docker/demo/Containerfile -t odoo-demo:18 .
 #
-# See docker/demo/README.md for the registry path, multi-arch and pushing.
+# See docker/demo/README.md for cross-architecture builds and pushing.
 
 FROM docker.io/library/odoo:18
 
