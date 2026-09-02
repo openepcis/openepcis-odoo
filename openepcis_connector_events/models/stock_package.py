@@ -80,6 +80,16 @@ class StockPackage(models.Model):
         for package in packages:
             if not package.openepcis_sscc:
                 package._openepcis_mint_sscc(quiet=True)
+        # A unit can be created already inside another, and that is as much a
+        # nesting as writing the container afterwards. The write override never
+        # sees it, so it is said from here — after the SSCCs exist, or the event
+        # would have no name for the unit that just went in.
+        inside = packages.filtered("parent_package_id")
+        if inside:
+            try:
+                inside._openepcis_report_renesting({package: self.browse() for package in inside})
+            except Exception:  # noqa: BLE001 — a report must never fail a creation
+                logger.exception("OpenEPCIS: reporting a new unit's container failed")
         return packages
 
     def action_openepcis_mint_sscc(self):
@@ -119,6 +129,114 @@ class StockPackage(models.Model):
         self.openepcis_sscc = number
         return number
 
+    # ------------------------------------------------------------------
+    # Units inside units
+    # ------------------------------------------------------------------
+
+    def write(self, vals):
+        """Report a unit moving into or out of another unit.
+
+        Odoo 19 lets logistic units nest, and GS1 has had the answer since
+        before that: a pallet of cases is an aggregation whose children are
+        SSCCs rather than trade items. It is the same standing statement as a
+        packed pallet — scan the outer label and the repository answers what is
+        under it — so it has to be reported at both ends or it goes stale.
+
+        ``parent_package_id`` is the hook because every route to nesting passes
+        through it: the put-in-pack flows write it, the field on the package
+        form writes it, and ``unpack`` clears it on the children. One override
+        therefore covers all of them, including the one this connector
+        deliberately left unreported when the addons were first ported.
+
+        ``package_dest_id`` is left alone on purpose. That field is where a unit
+        is *going* to be put during an open transfer, and a plan is not a fact.
+        """
+        if "parent_package_id" not in vals:
+            return super().write(vals)
+        before = {package: package.parent_package_id for package in self}
+        result = super().write(vals)
+        try:
+            self._openepcis_report_renesting(before)
+        except Exception:  # noqa: BLE001 — a report must never fail a transfer
+            logger.exception("OpenEPCIS: reporting a change of container failed")
+        return result
+
+    def _openepcis_report_renesting(self, before):
+        """One event per container, not one per unit that moved.
+
+        An aggregation is a statement about a container, so two cases put on
+        the same pallet are one statement about that pallet. Grouping also
+        keeps a re-nesting honest: a unit moved from one pallet to another
+        leaves the first and joins the second, and both halves are said.
+        """
+        left = {}
+        joined = {}
+        for package, was in before.items():
+            now_inside = package.parent_package_id
+            if now_inside == was:
+                continue
+            if was:
+                left[was] = left.get(was, self.browse()) | package
+            if now_inside:
+                joined[now_inside] = joined.get(now_inside, self.browse()) | package
+        for parent, children in left.items():
+            parent._openepcis_report_nesting(children, cbv.DELETE, cbv.UNPACKING)
+        for parent, children in joined.items():
+            parent._openepcis_report_nesting(children, cbv.ADD, cbv.PACKING)
+
+    def _openepcis_report_nesting(self, children, action, biz_step):
+        """Say which units are, or are no longer, inside this one."""
+        self.ensure_one()
+        company = self.company_id or self.env.company
+        if not self.openepcis_sscc or not self.env["openepcis.client"]._epcis_configured(company):
+            # Nothing was ever claimed about this container, so there is nothing
+            # to add to and nothing to take apart.
+            return
+        child_epcs = [child._openepcis_uri() for child in children if child.openepcis_sscc]
+        if not child_epcs:
+            logger.info(
+                "OpenEPCIS: units moved in or out of %s carry no SSCC — nothing reported",
+                self.name,
+            )
+            return
+        # The container's own location, because the statement is about it. A
+        # child on its way somewhere else has already left.
+        read_point = self.location_id._openepcis_read_point() if self.location_id else ""
+        if not read_point:
+            logger.info(
+                "OpenEPCIS: %s changed contents, but no location carries a GLN — nothing reported",
+                self.name,
+            )
+            return
+        # Nesting is an act rather than a completion: unlike a transfer it has
+        # no recorded date of its own, and the moment it is written is the
+        # moment it becomes true. The same rule the Unpack button follows.
+        moment = datetime.now(timezone.utc).replace(microsecond=0)
+        event = aggregation_event(
+            action=action,
+            event_time=moment,
+            parent_id=self._openepcis_uri(),
+            biz_step=biz_step,
+            disposition=cbv.IN_PROGRESS,
+            child_epcs=child_epcs,
+            child_quantities=[],
+            read_point=read_point,
+            biz_location=read_point,
+        )
+        self.env["openepcis.event"].queue(
+            document([event]),
+            _("%(name)s (%(step)s)", name=self.name, step=biz_step),
+            company,
+            idem_key=idempotency_key(
+                self.env["ir.config_parameter"].sudo().get_param("database.uuid") or "odoo",
+                biz_step,
+                self.openepcis_sscc,
+                *sorted(child_epcs),
+                moment.isoformat(),
+            ),
+            source=self,
+        )
+
     def unpack(self):
         """Taking the unit apart, from the package itself.
 
@@ -141,13 +259,12 @@ class StockPackage(models.Model):
         Never raises: emptying a pallet must not fail because a repository is
         unreachable, which is the same rule the transfer hook follows.
 
-        Only the goods directly inside are reported, which on Odoo 19 is exactly
-        what this call moves. Odoo 19 also lets units nest, and unpacking
-        detaches the child units as well — that is deliberately left unreported,
-        because nothing ever reported the nesting either. Withdrawing an
-        aggregation this connector never stated would be the same asymmetry the
-        other way round, and half a statement is worse than none. Reporting
-        nested units belongs with the event that puts them together, not here.
+        This reports the goods directly inside, which is exactly what this call
+        moves. The child units it also detaches are reported too, but not from
+        here: clearing their container is a write on them, and the override on
+        ``write`` says it. So an unpack with both produces two statements about
+        the same container — one for the loose goods, one for the units — and
+        each is true and complete on its own.
         """
         described = {package: package._openepcis_describe() for package in self}
         result = super().unpack()
