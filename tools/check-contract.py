@@ -10,7 +10,7 @@ them against a real deployment.
 Not part of the default CI run, because it needs a reachable deployment. Run it
 when a resolver release lands, or before publishing a new version of the addon:
 
-    python tools/check-contract.py https://id.dev.epcis.cloud
+    python tools/check-contract.py https://id.example.org
 
 Exit status is 0 when every endpoint the connector uses is still there, 1 when
 something has moved. A difference means the connector needs attention — do not
