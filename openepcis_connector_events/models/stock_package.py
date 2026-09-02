@@ -28,6 +28,7 @@ from ..vendored import (
     quantity_element,
     sscc_uri,
 )
+from .stock_move_line import PIECE
 
 logger = logging.getLogger(__name__)
 
@@ -299,7 +300,14 @@ class StockPackage(models.Model):
             uom = quant.product_uom_id.openepcis_rec20_code or ""
             merged[(epc_class, uom)] = merged.get((epc_class, uom), 0) + quant.quantity
         quantities = [
-            quantity_element(epc_class, quantity, uom or None)
+            # The same spelling a transfer uses. A quantity with no unit is
+            # read by EPCIS as a piece count, so the code for pieces is left
+            # off rather than stated — and it has to be left off *here* too,
+            # or the same goods read as one thing when they are packed and as
+            # another when they are unpacked. The quantity element goes into
+            # the event hash, so the two statements would not even be
+            # comparable.
+            quantity_element(epc_class, quantity, uom if uom and uom != PIECE else None)
             for (epc_class, uom), quantity in merged.items()
         ]
         # The same walk a transfer uses, asked of the location while the unit
