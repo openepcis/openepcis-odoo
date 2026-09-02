@@ -498,52 +498,6 @@ class TestAggregation(EventCase):
             ["https://id.gs1.org/01/%s/21/952-0100" % TEST_GTIN_14],
         )
 
-    def _aggregations(self):
-        import json
-
-        return [
-            event
-            for row in self._queued()
-            for event in json.loads(row.payload)["epcisBody"]["eventList"]
-            if event["type"] == "AggregationEvent"
-        ]
-
-    def _stocked_serial(self, product, serial, package):
-        """One serial of ``product``, in stock and inside ``package``."""
-        picking = self._transfer_into_package(product, serial, package)
-        self._queued().sudo().unlink()
-        picking.message_ids.unlink()
-        return picking
-
-    def _transfer_into_package(self, product, serial, package):
-        picking = self.env["stock.picking"].create(
-            {
-                "picking_type_id": self._incoming_type().id,
-                "location_id": self.supplier_location.id,
-                "location_dest_id": self.warehouse.lot_stock_id.id,
-                "move_ids": [
-                    (
-                        0,
-                        0,
-                        {
-                            "product_id": product.id,
-                            "product_uom_qty": 1,
-                            "product_uom": product.uom_id.id,
-                        },
-                    )
-                ],
-            }
-        )
-        picking.action_confirm()
-        picking.action_assign()
-        for line in picking.move_line_ids:
-            line.quantity = 1
-            line.lot_name = serial
-            line.result_package_id = package
-        picking.move_ids.picked = True
-        picking.button_validate()
-        return picking
-
     def test_picking_goods_off_a_pallet_says_the_unit_lost_them(self):
         """An aggregation is a standing statement, so it has to be withdrawn.
 
@@ -717,6 +671,169 @@ class TestAggregation(EventCase):
         package = self.env["stock.package"].create({})
         self.assertTrue(package.openepcis_sscc)
         self.assertTrue(package.openepcis_sscc.startswith("0" + self.company.openepcis_gcp))
+
+
+@tagged("post_install", "-at_install")
+class TestNesting(EventCase):
+    """A pallet of cases: the aggregation whose children are units, not goods.
+
+    New with Odoo 19, which lets logistic units nest. GS1 has had the answer
+    much longer — an AggregationEvent's childEPCs may be SSCCs — so what was
+    missing was never the vocabulary but the fact.
+    """
+
+    def _stocked(self, package, serial="952-0301", product=None):
+        """Give a unit something in it, so it has a location to be read at.
+
+        ``product`` is passed in where a test needs two stocked units: two
+        products would want two barcodes, and one GTIN twice is rejected.
+        """
+        if product is None:
+            product = self._published_product(tracking="serial")
+            product.product_tmpl_id.is_storable = True
+        self._stocked_serial(product, serial, package)
+        return package
+
+    def test_a_unit_put_inside_another_says_which_unit_went_in(self):
+        pallet = self._stocked(self.env["stock.package"].create({}))
+        case = self.env["stock.package"].create({})
+
+        case.parent_package_id = pallet
+
+        aggregations = self._aggregations()
+        self.assertEqual(len(aggregations), 1, [e.get("bizStep") for e in aggregations])
+        self.assertEqual(aggregations[0]["action"], "ADD")
+        self.assertEqual(aggregations[0]["bizStep"], "packing")
+        self.assertEqual(
+            aggregations[0]["parentID"], "https://id.gs1.org/00/%s" % pallet.openepcis_sscc
+        )
+        self.assertEqual(
+            aggregations[0]["childEPCs"], ["https://id.gs1.org/00/%s" % case.openepcis_sscc]
+        )
+        # An SSCC is an instance, never a class — nothing belongs in a quantity list.
+        self.assertNotIn("childQuantityList", aggregations[0])
+
+    def test_a_unit_taken_out_says_the_container_lost_it(self):
+        pallet = self._stocked(self.env["stock.package"].create({}))
+        case = self.env["stock.package"].create({"parent_package_id": pallet.id})
+        self._queued().sudo().unlink()
+
+        case.parent_package_id = False
+
+        aggregations = self._aggregations()
+        self.assertEqual(len(aggregations), 1)
+        self.assertEqual(aggregations[0]["action"], "DELETE")
+        self.assertEqual(aggregations[0]["bizStep"], "unpacking")
+        self.assertEqual(
+            aggregations[0]["parentID"], "https://id.gs1.org/00/%s" % pallet.openepcis_sscc
+        )
+
+    def test_moving_a_unit_between_containers_says_both_halves(self):
+        """The one case that proves grouping by container is the right shape.
+
+        A unit that changes pallet leaves one standing statement and joins
+        another. Reporting only the arrival would leave the first pallet
+        answering with a case that is no longer on it.
+        """
+        product = self._published_product(tracking="serial")
+        product.product_tmpl_id.is_storable = True
+        first = self._stocked(self.env["stock.package"].create({}), "952-0302", product)
+        second = self._stocked(self.env["stock.package"].create({}), "952-0303", product)
+        case = self.env["stock.package"].create({"parent_package_id": first.id})
+        self._queued().sudo().unlink()
+
+        case.parent_package_id = second
+
+        by_action = {event["action"]: event for event in self._aggregations()}
+        self.assertEqual(sorted(by_action), ["ADD", "DELETE"])
+        self.assertEqual(
+            by_action["DELETE"]["parentID"], "https://id.gs1.org/00/%s" % first.openepcis_sscc
+        )
+        self.assertEqual(
+            by_action["ADD"]["parentID"], "https://id.gs1.org/00/%s" % second.openepcis_sscc
+        )
+        for event in by_action.values():
+            self.assertEqual(event["childEPCs"], ["https://id.gs1.org/00/%s" % case.openepcis_sscc])
+
+    def test_two_units_into_one_container_are_one_statement(self):
+        """An aggregation is a statement about the container, not about a unit."""
+        pallet = self._stocked(self.env["stock.package"].create({}))
+        first = self.env["stock.package"].create({})
+        second = self.env["stock.package"].create({})
+        self._queued().sudo().unlink()
+
+        (first | second).write({"parent_package_id": pallet.id})
+
+        aggregations = self._aggregations()
+        self.assertEqual(len(aggregations), 1)
+        self.assertEqual(
+            sorted(aggregations[0]["childEPCs"]),
+            sorted(
+                "https://id.gs1.org/00/%s" % package.openepcis_sscc for package in (first, second)
+            ),
+        )
+
+    def test_a_unit_created_inside_another_says_so_too(self):
+        """The write override never sees this one — the container is in the
+        create values, so nothing is ever written afterwards."""
+        pallet = self._stocked(self.env["stock.package"].create({}), "952-0305")
+        self._queued().sudo().unlink()
+
+        case = self.env["stock.package"].create({"parent_package_id": pallet.id})
+
+        aggregations = self._aggregations()
+        self.assertEqual(len(aggregations), 1)
+        self.assertEqual(aggregations[0]["action"], "ADD")
+        self.assertEqual(
+            aggregations[0]["parentID"], "https://id.gs1.org/00/%s" % pallet.openepcis_sscc
+        )
+        self.assertEqual(
+            aggregations[0]["childEPCs"], ["https://id.gs1.org/00/%s" % case.openepcis_sscc]
+        )
+
+    def test_a_planned_container_is_not_a_fact(self):
+        """``package_dest_id`` is where a unit is going during an open transfer."""
+        pallet = self._stocked(self.env["stock.package"].create({}))
+        case = self.env["stock.package"].create({})
+        self._queued().sudo().unlink()
+
+        case.package_dest_id = pallet
+
+        self.assertEqual(self._aggregations(), [])
+
+    def test_a_container_without_an_sscc_claims_nothing(self):
+        """Nothing was said about it, so there is nothing to add to."""
+        pallet = self._stocked(self.env["stock.package"].create({}))
+        pallet.openepcis_sscc = False
+        case = self.env["stock.package"].create({})
+        self._queued().sudo().unlink()
+
+        case.parent_package_id = pallet
+
+        self.assertEqual(self._aggregations(), [])
+
+    def test_the_unpack_button_says_the_units_left_as_well(self):
+        """Two statements about one container, and both are complete.
+
+        Unpacking a pallet that holds loose goods *and* cases takes both out.
+        The goods are reported from the unpack hook, the cases by the write
+        that clears their container.
+        """
+        pallet = self._stocked(self.env["stock.package"].create({}), "952-0304")
+        case = self.env["stock.package"].create({"parent_package_id": pallet.id})
+        self._queued().sudo().unlink()
+
+        pallet.unpack()
+
+        aggregations = self._aggregations()
+        self.assertEqual(len(aggregations), 2, [e["childEPCs"] for e in aggregations])
+        parent = "https://id.gs1.org/00/%s" % pallet.openepcis_sscc
+        for event in aggregations:
+            self.assertEqual(event["action"], "DELETE")
+            self.assertEqual(event["parentID"], parent)
+        children = {tuple(event["childEPCs"]) for event in aggregations}
+        self.assertIn(("https://id.gs1.org/00/%s" % case.openepcis_sscc,), children)
+        self.assertIn(("https://id.gs1.org/01/%s/21/952-0304" % TEST_GTIN_14,), children)
 
 
 @tagged("post_install", "-at_install")

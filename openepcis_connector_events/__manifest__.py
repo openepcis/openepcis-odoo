@@ -21,7 +21,7 @@ outbox: validating a transfer never waits for the network.
     "author": "benelog GmbH & Co. KG",
     "website": "https://openepcis.io",
     "category": "Inventory/Inventory",
-    "version": "19.0.1.3.0",
+    "version": "19.0.1.4.0",
     "license": "LGPL-3",
     "depends": [
         "openepcis_connector_stock",

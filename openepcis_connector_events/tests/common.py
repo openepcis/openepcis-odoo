@@ -222,6 +222,56 @@ class EventCase(LotCase):
     def _deliver(self):
         self.env["openepcis.event"]._cron_capture()
 
+    # ------------------------------------------------------------------
+    # Aggregations, read by more than one test class
+    # ------------------------------------------------------------------
+
+    def _aggregations(self):
+        import json
+
+        return [
+            event
+            for row in self._queued()
+            for event in json.loads(row.payload)["epcisBody"]["eventList"]
+            if event["type"] == "AggregationEvent"
+        ]
+
+    def _stocked_serial(self, product, serial, package):
+        """One serial of ``product``, in stock and inside ``package``."""
+        picking = self._transfer_into_package(product, serial, package)
+        self._queued().sudo().unlink()
+        picking.message_ids.unlink()
+        return picking
+
+    def _transfer_into_package(self, product, serial, package):
+        picking = self.env["stock.picking"].create(
+            {
+                "picking_type_id": self._incoming_type().id,
+                "location_id": self.supplier_location.id,
+                "location_dest_id": self.warehouse.lot_stock_id.id,
+                "move_ids": [
+                    (
+                        0,
+                        0,
+                        {
+                            "product_id": product.id,
+                            "product_uom_qty": 1,
+                            "product_uom": product.uom_id.id,
+                        },
+                    )
+                ],
+            }
+        )
+        picking.action_confirm()
+        picking.action_assign()
+        for line in picking.move_line_ids:
+            line.quantity = 1
+            line.lot_name = serial
+            line.result_package_id = package
+        picking.move_ids.picked = True
+        picking.button_validate()
+        return picking
+
 
 __all__ = [
     "TEST_GTIN",
