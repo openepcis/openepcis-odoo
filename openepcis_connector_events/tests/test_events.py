@@ -637,7 +637,7 @@ class TestAggregation(EventCase):
         """
         product = self._published_product(tracking="lot")
         product.product_tmpl_id.is_storable = True
-        package = self.env["stock.package"].create({})
+        package = self.packages.create({})
         picking = self._transfer_into_package(product, "BATCH-U", package)
         packed = [event for event in self._aggregations() if event["action"] == "ADD"]
         self.assertEqual(len(packed), 1, [e["action"] for e in self._aggregations()])
