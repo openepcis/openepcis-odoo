@@ -5,7 +5,8 @@
 ## benelog_client
 
 A verbatim copy of the `benelog_client` package from the
-`benelog-client-python` library, licensed Apache-2.0 (see `benelog_client/LICENSE`). Apache-2.0 combines one-way
+[`benelog-client-python`](https://github.com/openepcis/benelog-client-python)
+library, licensed Apache-2.0 (see `benelog_client/LICENSE`). Apache-2.0 combines one-way
 into this addon's LGPL-3; the vendored files keep their own headers and licence.
 
 Vendored so the addon stays a drop-in: it must install on any Odoo, including
