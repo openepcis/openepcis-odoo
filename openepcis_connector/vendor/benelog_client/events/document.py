@@ -56,7 +56,13 @@ from . import cbv
 ID_GS1_ORG = "https://id.gs1.org"
 
 #: JSON-LD context of EPCIS 2.0. Belongs on the document, not on the event.
-EPCIS_CONTEXT = "https://ref.gs1.org/standards/epcis/2.0.0/epcis-context.jsonld"
+#:
+#: The UNVERSIONED URL. GS1 publishes the context at
+#: .../standards/epcis/epcis-context.jsonld; .../epcis/2.0.0/... pins a
+#: snapshot we do not mean. ``schemaVersion`` next to it stays "2.0" -- that
+#: is the property's value, not the context version, and GS1's own published
+#: examples carry it that way too.
+EPCIS_CONTEXT = "https://ref.gs1.org/standards/epcis/epcis-context.jsonld"
 
 #: UUIDv5 namespace for the sender-side idempotency keys this library derives
 #: (see :func:`idempotency_key`). Private and arbitrary, as RFC 4122 intends:
