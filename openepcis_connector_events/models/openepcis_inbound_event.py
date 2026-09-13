@@ -24,7 +24,7 @@ import logging
 
 from odoo import _, api, fields, models
 
-from ..vendored import BenelogError
+from ..vendored import OpenEpcisError
 
 logger = logging.getLogger(__name__)
 
@@ -151,7 +151,7 @@ class OpenepcisInboundEvent(models.Model):
                 row = self._receive(company, event)
                 if row and row.state == "received":
                     row._resolve()
-        except BenelogError as error:
+        except OpenEpcisError as error:
             # A repository that cannot be read is not an empty repository. Leave
             # the watermark where it is; the next run asks for the same window.
             logger.warning(

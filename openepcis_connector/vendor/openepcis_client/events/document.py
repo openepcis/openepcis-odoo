@@ -56,7 +56,13 @@ from . import cbv
 ID_GS1_ORG = "https://id.gs1.org"
 
 #: JSON-LD context of EPCIS 2.0. Belongs on the document, not on the event.
-EPCIS_CONTEXT = "https://ref.gs1.org/standards/epcis/2.0.0/epcis-context.jsonld"
+#:
+#: The UNVERSIONED URL. GS1 publishes the context at
+#: .../standards/epcis/epcis-context.jsonld; .../epcis/2.0.0/... pins a
+#: snapshot we do not mean. ``schemaVersion`` next to it stays "2.0" -- that
+#: is the property's value, not the context version, and GS1's own published
+#: examples carry it that way too.
+EPCIS_CONTEXT = "https://ref.gs1.org/standards/epcis/epcis-context.jsonld"
 
 #: UUIDv5 namespace for the sender-side idempotency keys this library derives
 #: (see :func:`idempotency_key`). Private and arbitrary, as RFC 4122 intends:
@@ -75,7 +81,7 @@ def gtin14(gtin: str) -> str:
     """A GTIN in the 14-digit form a Digital Link requires.
 
     One line, because the arithmetic belongs to the identifier and not to the
-    event: see :func:`benelog_client.core.gs1.gtin14`.
+    event: see :func:`openepcis_client.core.gs1.gtin14`.
 
     AI 01 is fourteen digits — always, whatever length the barcode on the
     product happens to be. A GTIN-13 (the ordinary EAN), a GTIN-12 or a GTIN-8
@@ -551,7 +557,7 @@ def _hashing() -> tuple[Any, Any]:
     except ImportError as missing:  # pragma: no cover - exercised by the message
         raise RuntimeError(
             "Computing an eventID needs the canonical hash generator. Install this "
-            "client with its 'hash' extra: pip install 'benelog-client[hash]'."
+            "client with its 'hash' extra: pip install 'openepcis-client[hash]'."
         ) from missing
     return hash_generator, json_to_py
 

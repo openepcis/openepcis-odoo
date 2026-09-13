@@ -57,12 +57,12 @@ class TestInbox(EventCase):
         self.assertTrue(self.query.asked[-1].startswith("2026-08-27T22:08:29"))
 
     def test_a_repository_that_cannot_be_read_leaves_the_watermark_alone(self):
-        from odoo.addons.openepcis_connector.vendor.benelog_client.core.errors import (
-            BenelogError,
+        from odoo.addons.openepcis_connector.vendor.openepcis_client.core.errors import (
+            OpenEpcisError,
         )
 
         self.company.openepcis_events_since = "2026-08-27T22:13:29.000Z"
-        self.query.error_to_raise = BenelogError("no", status=503)
+        self.query.error_to_raise = OpenEpcisError("no", status=503)
         self._poll()
         self.assertEqual(
             self.company.openepcis_events_since,

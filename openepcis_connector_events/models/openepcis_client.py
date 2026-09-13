@@ -14,7 +14,7 @@ second; the repository then answers 403 without saying which role it missed.
 from odoo import _, api, models
 from odoo.exceptions import UserError
 
-from ..vendored import BenelogError, Capture, Client, ClientConfig, Query
+from ..vendored import OpenEpcisError, Capture, Client, ClientConfig, Query
 
 #: Cached per (database, company, address). The client is a thin wrapper over a
 #: requests session; building one per event would open a connection per event.
@@ -106,5 +106,5 @@ class OpenepcisClient(models.AbstractModel):
             # other. Checking only the sending half is how an inbox ends up
             # silent and looking healthy.
             return self._epcis_query(company).check()
-        except BenelogError as error:
+        except OpenEpcisError as error:
             return str(error)

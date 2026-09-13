@@ -24,7 +24,7 @@ from odoo import _, api, fields, models
 from odoo.exceptions import ValidationError
 
 from ..utils.gs1 import language_tag
-from ..vendor.benelog_client.masterdata.payload import place
+from ..vendor.openepcis_client.masterdata.payload import place
 
 _logger = logging.getLogger(__name__)
 

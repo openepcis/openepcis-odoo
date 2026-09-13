@@ -2,11 +2,11 @@
 
 # Vendored libraries
 
-## benelog_client
+## openepcis_client
 
-A verbatim copy of the `benelog_client` package from the
-[`benelog-client-python`](https://github.com/openepcis/benelog-client-python)
-library, licensed Apache-2.0 (see `benelog_client/LICENSE`). Apache-2.0 combines one-way
+A verbatim copy of the `openepcis_client` package from the
+[`openepcis-client-python`](https://github.com/openepcis/openepcis-client-python)
+library, licensed Apache-2.0 (see `openepcis_client/LICENSE`). Apache-2.0 combines one-way
 into this addon's LGPL-3; the vendored files keep their own headers and licence.
 
 Vendored so the addon stays a drop-in: it must install on any Odoo, including
@@ -17,9 +17,9 @@ only dependency is `requests`, which Odoo depends on itself.
 re-vendor:
 
 ```bash
-tools/vendor_benelog_client.sh [path-or-url] [ref]
+tools/vendor_openepcis_client.sh [path-or-url] [ref]
 ```
 
 The script records the vendored commit below.
 
-Vendored commit: `853f931`
+Vendored commit: `c64ae37`

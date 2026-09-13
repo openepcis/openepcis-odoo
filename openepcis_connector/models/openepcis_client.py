@@ -1,5 +1,5 @@
 # Part of the OpenEPCIS connector for Odoo. See LICENSE (LGPL-3).
-"""The Odoo adapter around the vendored ``benelog_client`` library.
+"""The Odoo adapter around the vendored ``openepcis_client`` library.
 
 An ``AbstractModel`` rather than a plain module so that it can be overridden by
 another addon and stubbed in tests without patching imports:
@@ -7,7 +7,7 @@ another addon and stubbed in tests without patching imports:
     self.env["openepcis.client"].get("/sync/channels")
 
 Transport, authentication and retry semantics live in the library
-(``vendor/benelog_client``); this model contributes exactly the parts only Odoo
+(``vendor/openepcis_client``); this model contributes exactly the parts only Odoo
 can know:
 
 - **Configuration** from ``res.company`` fields, with a translated dialog when
@@ -16,7 +16,7 @@ can know:
   the rotated replacement Keycloak may answer with on every exchange, which
   must land back on the company record or the connector locks itself out.
 - **Phrasing**: the library raises structured, English
-  :class:`~..vendor.benelog_client.core.errors.BenelogError`; this adapter
+  :class:`~..vendor.openepcis_client.core.errors.OpenEpcisError`; this adapter
   re-phrases the cases an administrator acts on with ``_()`` and re-raises
   everything as the addon's own :class:`~..utils.exceptions.OpenepcisError`,
   so no caller changes.
@@ -44,10 +44,10 @@ from odoo import _, api, models
 from odoo.exceptions import UserError
 
 from ..utils.exceptions import OpenepcisError
-from ..vendor.benelog_client.core.auth import OfflineTokenAuth, token_subject, token_type
-from ..vendor.benelog_client.core.client import Client
-from ..vendor.benelog_client.core.config import ClientConfig
-from ..vendor.benelog_client.core.errors import BenelogError
+from ..vendor.openepcis_client.core.auth import OfflineTokenAuth, token_subject, token_type
+from ..vendor.openepcis_client.core.client import Client
+from ..vendor.openepcis_client.core.config import ClientConfig
+from ..vendor.openepcis_client.core.errors import OpenEpcisError
 
 _logger = logging.getLogger(__name__)
 
@@ -186,7 +186,7 @@ class OpenepcisClient(models.AbstractModel):
             auth.invalidate()
         try:
             return auth.bearer()
-        except BenelogError as exc:
+        except OpenEpcisError as exc:
             raise self._adapt(exc) from exc
 
     @api.model
@@ -232,7 +232,7 @@ class OpenepcisClient(models.AbstractModel):
         _auth, client = self._bound(self._company(company))
         try:
             return client.request(method, path, payload=payload, params=params, timeout=timeout)
-        except BenelogError as exc:
+        except OpenEpcisError as exc:
             raise self._adapt(exc) from exc
 
     @api.model
@@ -241,7 +241,7 @@ class OpenepcisClient(models.AbstractModel):
         _auth, client = self._bound(self._company(company))
         try:
             return client.post_file(path, filename, content, form=form, timeout=timeout)
-        except BenelogError as exc:
+        except OpenEpcisError as exc:
             raise self._adapt(exc) from exc
 
     # ------------------------------------------------------------------
