@@ -45,7 +45,7 @@ cannot carry a uniqueness constraint any more.
 
 import json
 import uuid
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import datetime, timezone
 from typing import Any
 
@@ -63,6 +63,15 @@ ID_GS1_ORG = "https://id.gs1.org"
 #: is the property's value, not the context version, and GS1's own published
 #: examples carry it that way too.
 EPCIS_CONTEXT = "https://ref.gs1.org/standards/epcis/epcis-context.jsonld"
+
+#: The snapshot of that context the hash generator ships as a file, keyed by the
+#: versioned URL. Hashing expands the event against its context, and the
+#: generator's loader knows only this URL and the old github.io one -- for any
+#: other it goes to the internet. Our documents carry the unversioned URL, so
+#: without a mapping every eventID would cost a network round trip and fail
+#: where there is none (an Odoo test run, a pod without egress). The published
+#: context is the same document; GS1 has issued no later revision.
+_BUNDLED_CONTEXT = "https://ref.gs1.org/standards/epcis/2.0.0/epcis-context.jsonld"
 
 #: UUIDv5 namespace for the sender-side idempotency keys this library derives
 #: (see :func:`idempotency_key`). Private and arbitrary, as RFC 4122 intends:
@@ -553,13 +562,32 @@ def _hashing() -> tuple[Any, Any]:
     ``requests``, and that is worth keeping.
     """
     try:
-        from epcis_event_hash_generator import hash_generator, json_to_py
+        from epcis_event_hash_generator import file_document_loader, hash_generator, json_to_py
+        from pyld import jsonld
     except ImportError as missing:  # pragma: no cover - exercised by the message
         raise RuntimeError(
             "Computing an eventID needs the canonical hash generator. Install this "
             "client with its 'hash' extra: pip install 'openepcis-client[hash]'."
         ) from missing
+    jsonld.set_document_loader(_offline_context_loader(file_document_loader.file_document_loader()))
     return hash_generator, json_to_py
+
+
+def _offline_context_loader(
+    bundled: Callable[[str, dict[str, Any]], dict[str, Any]],
+) -> Callable[[str, dict[str, Any] | None], dict[str, Any]]:
+    """The generator's file loader, taught the unversioned context URL.
+
+    Everything else passes through untouched, including its internet fallback
+    for URLs neither of us knows.
+    """
+
+    def loader(url: str, options: dict[str, Any] | None = None) -> dict[str, Any]:
+        if url == EPCIS_CONTEXT:
+            return {**bundled(_BUNDLED_CONTEXT, options or {}), "documentUrl": url}
+        return bundled(url, options or {})
+
+    return loader
 
 
 # -- Internals --------------------------------------------------------------
