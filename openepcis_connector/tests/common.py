@@ -17,7 +17,7 @@ from odoo.tests.common import TransactionCase
 
 from ..models.openepcis_client import OpenepcisClient
 from ..utils.exceptions import OpenepcisError
-from ..vendor.benelog_client.core.auth import OfflineTokenAuth
+from ..vendor.openepcis_client.core.auth import OfflineTokenAuth
 
 CLIENT_REQUEST = "odoo.addons.openepcis_connector.models.openepcis_client.OpenepcisClient.request"
 

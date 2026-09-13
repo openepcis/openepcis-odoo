@@ -324,12 +324,12 @@ class TestDelivery(EventCase):
         It means the first attempt landed after all. Booking it as refused
         would leave the queue full of rows that look broken and are not.
         """
-        from odoo.addons.openepcis_connector.vendor.benelog_client.core.errors import (
-            BenelogError,
+        from odoo.addons.openepcis_connector.vendor.openepcis_client.core.errors import (
+            OpenEpcisError,
         )
 
         self._transfer(self._incoming_type(), self._published_product(tracking="none"))
-        self.capture.error_to_raise = BenelogError("Duplicate EPCIS Event", status=400)
+        self.capture.error_to_raise = OpenEpcisError("Duplicate EPCIS Event", status=400)
 
         self._deliver()
 

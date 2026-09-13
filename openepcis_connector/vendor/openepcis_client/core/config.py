@@ -3,8 +3,8 @@
 """Connection settings, held apart from credentials.
 
 The config names *where* the platform is; the credentials live in an
-:class:`~benelog_client.core.auth.AuthStrategy` and its
-:class:`~benelog_client.core.auth.TokenStore`, because a host framework owns
+:class:`~openepcis_client.core.auth.AuthStrategy` and its
+:class:`~openepcis_client.core.auth.TokenStore`, because a host framework owns
 their persistence and this library must not.
 """
 

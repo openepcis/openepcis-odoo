@@ -26,7 +26,7 @@ from typing import Any, Protocol
 import requests
 
 from .config import ClientConfig
-from .errors import BenelogError
+from .errors import OpenEpcisError
 
 #: Mint a new access token this many seconds before the current one lapses, so
 #: a request never starts with a token that expires mid-flight.
@@ -67,7 +67,7 @@ class TokenStore(Protocol):
 
 
 class AuthStrategy(Protocol):
-    """A source of bearer tokens for :class:`~benelog_client.core.client.Client`."""
+    """A source of bearer tokens for :class:`~openepcis_client.core.client.Client`."""
 
     def bearer(self) -> str:
         """A currently valid access token."""
@@ -123,7 +123,7 @@ def token_subject(token: str) -> str:
 
 
 class OfflineTokenAuth:
-    """Mode one: benelog credentials via an OIDC offline token.
+    """Mode one: OpenEPCIS credentials via an OIDC offline token.
 
     :param config: where the resolver is and how patient to be.
     :param token_store: the host's persistence for the offline token.
@@ -180,9 +180,9 @@ class OfflineTokenAuth:
         try:
             response = self._session.get(url, timeout=self._config.token_timeout)
         except requests.exceptions.RequestException as exc:
-            raise BenelogError(f"Could not reach the resolver at {url}: {exc}") from exc
+            raise OpenEpcisError(f"Could not reach the resolver at {url}: {exc}") from exc
         if response.status_code >= 300:
-            raise BenelogError(
+            raise OpenEpcisError(
                 f"The resolver at {base_url} does not publish OAuth metadata "
                 f"({url} answered {response.status_code}). Configure the realm "
                 "URL explicitly.",
@@ -191,11 +191,11 @@ class OfflineTokenAuth:
         try:
             servers = (response.json() or {}).get("authorization_servers") or []
         except ValueError as exc:
-            raise BenelogError(
+            raise OpenEpcisError(
                 f"The resolver at {url} returned no OAuth metadata document."
             ) from exc
         if not servers:
-            raise BenelogError(
+            raise OpenEpcisError(
                 f"The resolver at {url} names no authorization server in its OAuth metadata."
             )
 
@@ -213,9 +213,9 @@ class OfflineTokenAuth:
         try:
             response = self._session.get(url, timeout=self._config.token_timeout)
         except requests.exceptions.RequestException as exc:
-            raise BenelogError(f"Could not reach the realm at {url}: {exc}") from exc
+            raise OpenEpcisError(f"Could not reach the realm at {url}: {exc}") from exc
         if response.status_code >= 300:
-            raise BenelogError(
+            raise OpenEpcisError(
                 f"The realm URL does not look like an OIDC realm: {url} answered "
                 f"{response.status_code}. It should end in /realms/<name>.",
                 status=response.status_code,
@@ -223,9 +223,11 @@ class OfflineTokenAuth:
         try:
             document = response.json()
         except ValueError as exc:
-            raise BenelogError(f"The realm at {url} did not return a discovery document.") from exc
+            raise OpenEpcisError(
+                f"The realm at {url} did not return a discovery document."
+            ) from exc
         if not isinstance(document, dict):
-            raise BenelogError(f"The realm at {url} did not return a discovery document.")
+            raise OpenEpcisError(f"The realm at {url} did not return a discovery document.")
 
         _OIDC_CONFIG[issuer] = document
         return document
@@ -243,7 +245,7 @@ class OfflineTokenAuth:
         """
         endpoint = self._oidc_config().get("token_endpoint")
         if not endpoint:
-            raise BenelogError("The realm advertises no token endpoint.")
+            raise OpenEpcisError("The realm advertises no token endpoint.")
 
         offline_token = self._store.get_offline_token()
         payload = {
@@ -259,7 +261,7 @@ class OfflineTokenAuth:
                 str(endpoint), data=payload, timeout=self._config.token_timeout
             )
         except requests.exceptions.RequestException as exc:
-            raise BenelogError(f"Could not reach the token endpoint: {exc}") from exc
+            raise OpenEpcisError(f"Could not reach the token endpoint: {exc}") from exc
 
         if response.status_code >= 300:
             raise self._token_error(response)
@@ -267,7 +269,7 @@ class OfflineTokenAuth:
         body = response.json()
         access_token = body.get("access_token")
         if not access_token:
-            raise BenelogError("The token endpoint returned no access token.")
+            raise OpenEpcisError("The token endpoint returned no access token.")
 
         rotated = body.get("refresh_token")
         if rotated and rotated != offline_token:
@@ -284,7 +286,7 @@ class OfflineTokenAuth:
         return str(access_token), int(body.get("expires_in") or 60)
 
     @staticmethod
-    def _token_error(response: requests.Response) -> BenelogError:
+    def _token_error(response: requests.Response) -> OpenEpcisError:
         """Phrase a token failure as something an operator can act on."""
         detail: dict[str, Any] = {}
         try:
@@ -303,7 +305,7 @@ class OfflineTokenAuth:
             # the reader to the wrong fix. Keycloak names the expected issuer,
             # so pass it through.
             if "issuer" in description.lower():
-                return BenelogError(
+                return OpenEpcisError(
                     "The offline token was issued by a different URL than the "
                     f"one configured here: {description}. A token is bound to "
                     "the issuer it was minted under; an alias hostname for the "
@@ -311,7 +313,7 @@ class OfflineTokenAuth:
                     status=response.status_code,
                     problem=detail,
                 )
-            return BenelogError(
+            return OpenEpcisError(
                 f"The offline token is no longer accepted ({description or code}). "
                 "It has been revoked, or the realm's offline session has been "
                 "removed. Deposit a fresh one.",
@@ -319,13 +321,13 @@ class OfflineTokenAuth:
                 problem=detail,
             )
         if code == "unauthorized_client":
-            return BenelogError(
+            return OpenEpcisError(
                 "The identity provider refused the client. Check the client ID, "
                 "and the secret if the client is confidential.",
                 status=response.status_code,
                 problem=detail,
             )
-        return BenelogError(
+        return OpenEpcisError(
             "The identity provider refused to issue a token: "
             f"{description or code or response.text[:200]}",
             status=response.status_code,
