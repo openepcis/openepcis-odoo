@@ -24,7 +24,7 @@ import requests
 
 from .auth import AuthStrategy
 from .config import ClientConfig
-from .errors import BenelogError
+from .errors import OpenEpcisError
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ class Client:
 
     :param config: where the platform is.
     :param auth: the bearer source; see
-        :class:`~benelog_client.core.auth.OfflineTokenAuth`.
+        :class:`~openepcis_client.core.auth.OfflineTokenAuth`.
     :param session: a ``requests``-compatible session, injectable for tests.
     """
 
@@ -103,7 +103,7 @@ class Client:
             naming the job — where decoding the body would discard the only
             thing the call returned.
         :returns: the parsed JSON, or ``None`` for an empty body (``204``).
-        :raises BenelogError: for every non-2xx answer and every transport
+        :raises OpenEpcisError: for every non-2xx answer and every transport
             failure. Callers decide whether that aborts them or gets recorded.
         """
         url = self._url(path)
@@ -138,10 +138,10 @@ class Client:
             except requests.exceptions.RequestException as exc:
                 # No status: the request may or may not have been applied. Only
                 # idempotent methods get another go, so repeating is safe.
-                last_error = BenelogError(
+                last_error = OpenEpcisError(
                     f"Could not reach the platform at {url}: {exc}", path=path
                 )
-                logger.warning("benelog %s %s failed: %s", method, path, exc)
+                logger.warning("OpenEPCIS %s %s failed: %s", method, path, exc)
                 used += 1
                 if used >= tries:
                     raise last_error from exc
@@ -165,7 +165,7 @@ class Client:
             used += 1
             if error.is_retryable and used < tries:
                 logger.info(
-                    "benelog %s %s answered %s, retrying", method, path, response.status_code
+                    "OpenEPCIS %s %s answered %s, retrying", method, path, response.status_code
                 )
                 backoff = BACKOFF_SECONDS[min(used - 1, len(BACKOFF_SECONDS) - 1)]
                 continue
@@ -199,7 +199,9 @@ class Client:
                 timeout=timeout or (5, 300),
             )
         except requests.exceptions.RequestException as exc:
-            raise BenelogError(f"Could not reach the platform at {url}: {exc}", path=path) from exc
+            raise OpenEpcisError(
+                f"Could not reach the platform at {url}: {exc}", path=path
+            ) from exc
         if response.status_code >= 300:
             raise self._error_from(response, path)
         return self._decode(response)
@@ -219,18 +221,18 @@ class Client:
             # A login page instead of JSON is the classic symptom of an OIDC
             # bounce in front of the API; say so instead of "invalid JSON".
             if "html" in (response.headers.get("Content-Type") or ""):
-                raise BenelogError(
+                raise OpenEpcisError(
                     "The platform answered with a web page instead of data. The "
                     "URL probably points at something other than the API.",
                     status=response.status_code,
                 ) from None
-            raise BenelogError(
+            raise OpenEpcisError(
                 "The platform sent a body that is not JSON.", status=response.status_code
             ) from None
 
     @staticmethod
-    def _error_from(response: requests.Response, path: str) -> BenelogError:
-        """Turn a failed answer into a :class:`BenelogError` a human can read.
+    def _error_from(response: requests.Response, path: str) -> OpenEpcisError:
+        """Turn a failed answer into a :class:`OpenEpcisError` a human can read.
 
         The platform reports errors as RFC 7807 problem documents, so
         ``detail`` is already a sentence written for the caller. Prefer it over
@@ -250,4 +252,4 @@ class Client:
         if not message:
             message = "The platform refused the call without saying why."
 
-        return BenelogError(message, status=response.status_code, problem=problem, path=path)
+        return OpenEpcisError(message, status=response.status_code, problem=problem, path=path)

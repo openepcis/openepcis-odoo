@@ -1,7 +1,7 @@
 # Part of the OpenEPCIS connector for Odoo. See LICENSE (LGPL-3).
 """The client adapter: configuration, token persistence, phrasing, diagnosis.
 
-Transport and retry mechanics live in the vendored ``benelog_client`` and are
+Transport and retry mechanics live in the vendored ``openepcis_client`` and are
 tested in that repository. What belongs to *this* addon — and is defended
 here — is the seam: settings come off ``res.company`` with a translated
 dialog when incomplete, a rotated offline token lands back on the company
@@ -25,8 +25,8 @@ from odoo.tests import tagged
 from ..models import openepcis_client as client_module
 from ..models.openepcis_client import OpenepcisClient
 from ..utils.exceptions import OpenepcisError
-from ..vendor.benelog_client.core import auth as lib_auth
-from ..vendor.benelog_client.core import client as lib_client
+from ..vendor.openepcis_client.core import auth as lib_auth
+from ..vendor.openepcis_client.core import client as lib_client
 from .common import OpenepcisCase
 
 ISSUER = "https://auth.example.test/realms/openepcis"

@@ -13,8 +13,8 @@ for an end user's screen.
 """
 
 
-class BenelogError(Exception):
-    """A call to the benelog platform did not succeed.
+class OpenEpcisError(Exception):
+    """A call to the OpenEPCIS platform did not succeed.
 
     :param message: a plain description. The RFC 7807 ``detail`` when the
         server sent one, otherwise what went wrong in transport.

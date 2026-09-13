@@ -85,7 +85,7 @@ def localized(values: dict[str, str]) -> dict[str, str] | None:
 
     Keys are BCP-47 primary subtags (``de``, ``en``); the host derives them
     from its locale codes, for example with
-    :func:`benelog_client.core.gs1.language_tag`.
+    :func:`openepcis_client.core.gs1.language_tag`.
     """
     kept = {tag: text.strip() for tag, text in values.items() if tag and text and text.strip()}
     return kept or None

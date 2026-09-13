@@ -26,7 +26,7 @@ from typing import Any
 from urllib.parse import quote
 
 from ..core.client import Client
-from ..core.errors import BenelogError
+from ..core.errors import OpenEpcisError
 
 #: Where a repository takes documents. Fixed by EPCIS 2.0, not a deployment
 #: choice — the standard names the path, and every conformant repository serves
@@ -87,7 +87,7 @@ class CaptureOutcome:
 class Capture:
     """Delivery of EPCIS documents into one repository.
 
-    :param client: a :class:`~benelog_client.core.client.Client` pointed at the
+    :param client: a :class:`~openepcis_client.core.client.Client` pointed at the
         **repository**, not at the resolver. They are two services; giving this
         the resolver's client produces a ``404`` on a path the resolver never
         claimed to serve.
@@ -99,7 +99,7 @@ class Capture:
     def submit(self, epcis_document: Mapping[str, Any]) -> CaptureReceipt:
         """Hand a document over.
 
-        :raises BenelogError: if the repository refuses it outright — a
+        :raises OpenEpcisError: if the repository refuses it outright — a
             malformed document, a missing permission, an unreachable host. A
             document that is accepted and *then* found faulty does not raise;
             ask :meth:`outcome`.
@@ -124,7 +124,7 @@ class Capture:
             raise ValueError("this receipt carries no job to ask about")
         try:
             body = self._client.get(f"{CAPTURE_PATH}/{job}")
-        except BenelogError as error:
+        except OpenEpcisError as error:
             if error.status == 404:
                 return CaptureOutcome(running=False, success=False, known=False)
             raise
@@ -139,7 +139,7 @@ class Capture:
         """
         try:
             self._client.get(CAPTURE_PATH, params={"perPage": 1})
-        except BenelogError as error:
+        except OpenEpcisError as error:
             if error.status == 403:
                 return (
                     "The repository accepted the credential but refused the request: this "
@@ -279,7 +279,7 @@ class Query:
         """
         try:
             self._client.get(EVENTS_PATH, params={"perPage": 1})
-        except BenelogError as error:
+        except OpenEpcisError as error:
             if error.status == 403:
                 return (
                     "The repository accepted the credential but refused the request: this "

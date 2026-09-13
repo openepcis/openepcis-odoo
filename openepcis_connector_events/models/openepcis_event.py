@@ -37,7 +37,7 @@ from datetime import datetime, timezone
 from odoo import _, api, fields, models
 from odoo.exceptions import UserError
 
-from ..vendored import BenelogError, cbv, error_declaration, stamp_event_ids
+from ..vendored import OpenEpcisError, cbv, error_declaration, stamp_event_ids
 
 logger = logging.getLogger(__name__)
 
@@ -231,7 +231,7 @@ class OpenepcisEvent(models.Model):
         self.ensure_one()
         try:
             receipt = capture.submit(json.loads(self.payload))
-        except BenelogError as error:
+        except OpenEpcisError as error:
             if _is_duplicate(error):
                 # The repository already holds this event. That is not a
                 # failure, it is the answer we were hoping for: the retry
@@ -289,7 +289,7 @@ class OpenepcisEvent(models.Model):
         self.ensure_one()
         try:
             outcome = capture.outcome(self.job)
-        except BenelogError as error:
+        except OpenEpcisError as error:
             logger.info("OpenEPCIS event %s: job not answerable yet (%s)", self.name, error)
             return
         if not outcome.settled:
