@@ -92,9 +92,9 @@ class Registry:
         with GS1; :meth:`confirm_key` when the record using it is saved,
         :meth:`release_key` when it is not.
 
-        :raises BenelogError: with :attr:`~.BenelogError.is_conflict` when the
+        :raises OpenEpcisError: with :attr:`~.OpenEpcisError.is_conflict` when the
             tenant holds no licence for the AI, and
-            :attr:`~.BenelogError.is_missing_claim` when the identity carries
+            :attr:`~.OpenEpcisError.is_missing_claim` when the identity carries
             no company prefix.
         """
         answer = self._client.request(

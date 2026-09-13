@@ -40,7 +40,7 @@ INVALID_KEY = "INVALID_KEY"
 class InvalidKey(ValueError):
     """A GS1 key that fails validation before any request is made.
 
-    Carries the structured :class:`~benelog_client.core.gs1.KeyProblem`, so a
+    Carries the structured :class:`~openepcis_client.core.gs1.KeyProblem`, so a
     host adapter can phrase the fault in its own language instead of parsing
     an English sentence.
     """
@@ -128,7 +128,7 @@ class Masterdata:
         """Load products in bulk. Creates only; see the module docstring.
 
         Rows are dicts keyed by the bulk column names of the vocabulary
-        manifest (:func:`~benelog_client.masterdata.vocabulary.bulk_columns`).
+        manifest (:func:`~openepcis_client.masterdata.vocabulary.bulk_columns`).
         Unknown keys are dropped; a row whose GTIN is not a valid GS1 key is
         refused here and reported, because the server would fail it one opaque
         row at a time.
@@ -166,7 +166,7 @@ class Masterdata:
             chunk = sendable[start : start + CHUNK_ROWS]
             answer = self._client.post_file(
                 kind.bulk_endpoint,
-                "benelog-import.csv",
+                "openepcis-import.csv",
                 self._csv(columns, [row for _, row in chunk]),
                 form={"format": "csv"},
             )
