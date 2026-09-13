@@ -14,7 +14,7 @@ second; the repository then answers 403 without saying which role it missed.
 from odoo import _, api, models
 from odoo.exceptions import UserError
 
-from ..vendored import OpenEpcisError, Capture, Client, ClientConfig, Query
+from ..vendored import Capture, Client, ClientConfig, OpenEpcisError, Query
 
 #: Cached per (database, company, address). The client is a thin wrapper over a
 #: requests session; building one per event would open a connection per event.
