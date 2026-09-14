@@ -24,8 +24,23 @@ root=${1:?usage: ci-run-tests.sh <path-to-this-checkout>}
 # real imports are pyld and dateutil, and those are installed with their chains.
 echo "::group::Installing the canonical hash generator"
 pip3 install --no-cache-dir --break-system-packages PyLD python-dateutil
+#
+# NOT the PyPI release. 1.9.3 is from 2023 and its offline document loader knows
+# only two context URLs -- gs1.github.io and .../epcis/2.0.0/... . A document
+# carrying today's unversioned context URL falls through to a network fetch,
+# which this suite forbids, so every eventID computation raises BlockedRequest.
+# The entry exists upstream but has never been released; see
+# openepcis/epcis-event-hash-generator@aad1d97.
+#
+# Pinned to that commit rather than to the fork's tip: the tip additionally
+# claims version 1.10.0, a number nobody published. At aad1d97 setup.py still
+# reads 1.9.3, which is honest -- but it does mean a later bare
+# `pip install epcis-event-hash-generator` would look satisfied by it. Nothing
+# here does that; worth knowing if that ever changes.
+#
+# Replace with a plain version pin as soon as a release carries the entry.
 pip3 install --no-cache-dir --break-system-packages --no-deps \
-    "epcis-event-hash-generator==1.9.3"
+    "epcis-event-hash-generator @ git+https://github.com/openepcis/epcis-event-hash-generator@aad1d97"
 echo "::endgroup::"
 
 # Derived from the directories present, not from a list somebody has to
