@@ -48,6 +48,7 @@ from ..vendor.openepcis_client.core.auth import OfflineTokenAuth, token_subject,
 from ..vendor.openepcis_client.core.client import Client
 from ..vendor.openepcis_client.core.config import ClientConfig
 from ..vendor.openepcis_client.core.errors import OpenEpcisError
+from ..vendor.openepcis_client.masterdata import Masterdata
 
 _logger = logging.getLogger(__name__)
 
@@ -243,6 +244,17 @@ class OpenepcisClient(models.AbstractModel):
             return client.post_file(path, filename, content, form=form, timeout=timeout)
         except OpenEpcisError as exc:
             raise self._adapt(exc) from exc
+
+    @api.model
+    def masterdata(self, company=None):
+        """The library's master data service, bound to a company's credentials.
+
+        For the calls that are more than a verb and a path, such as walking
+        the organization list page by page. Its errors are the library's own;
+        callers pass them through :meth:`_adapt` like every other call here.
+        """
+        _auth, client = self._bound(self._company(company))
+        return Masterdata(client)
 
     # ------------------------------------------------------------------
     # Phrasing

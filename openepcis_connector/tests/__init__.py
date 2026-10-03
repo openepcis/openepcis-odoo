@@ -8,3 +8,4 @@ from . import test_partner
 from . import test_key_pool
 from . import test_channel
 from . import test_bulk_import
+from . import test_partner_pull
