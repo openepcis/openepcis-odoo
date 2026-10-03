@@ -19,5 +19,22 @@
       <field name="active" eval="True"/>
     </record>
 
+    <!--
+      Reading organizations back is the slower direction on purpose: each run
+      walks the tenant's whole organization list, because the catalog does not
+      yet say when a record changed. Fifteen minutes keeps that walk rare while
+      a change made in another system still arrives within the quarter hour.
+    -->
+    <record id="cron_pull_organizations" model="ir.cron">
+      <field name="name">OpenEPCIS: read organizations back</field>
+      <field name="model_id" ref="base.model_res_partner"/>
+      <field name="state">code</field>
+      <field name="code">model._openepcis_cron_pull()</field>
+      <field name="interval_number">15</field>
+      <field name="interval_type">minutes</field>
+      <field name="nextcall" eval="(DateTime.now() + timedelta(minutes=15)).strftime('%Y-%m-%d %H:%M:%S')"/>
+      <field name="active" eval="True"/>
+    </record>
+
   </data>
 </odoo>
