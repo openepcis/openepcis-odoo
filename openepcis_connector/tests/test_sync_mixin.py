@@ -89,8 +89,8 @@ class TestPublishing(OpenepcisCase):
         product = self._product()
         product.openepcis_publish = True
         product._openepcis_sync()
-        # Body und Pfad muessen dieselbe Schreibweise tragen, sonst legt der
-        # Katalog zwei Ressourcen fuer ein Produkt an.
+        # Body and path must carry the same spelling, otherwise the catalog
+        # creates two resources for one product.
         self.assertEqual(calls[0]["payload"]["gtin"], TEST_GTIN_14)
 
     def test_a_bad_check_digit_is_caught_before_any_call(self):

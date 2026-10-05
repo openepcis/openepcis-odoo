@@ -80,6 +80,16 @@
         ]
       }
     },
+    "/organizations": {
+      "get": {
+        "responses": [
+          "200",
+          "401",
+          "403",
+          "500"
+        ]
+      }
+    },
     "/organizations/{globalLocationNumber}": {
       "put": {
         "responses": [
