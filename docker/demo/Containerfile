@@ -29,6 +29,8 @@ COPY --chown=odoo:odoo openepcis_connector_product_expiry /mnt/extra-addons/open
 COPY --chown=odoo:odoo openepcis_connector_events /mnt/extra-addons/openepcis_connector_events
 COPY --chown=odoo:odoo openepcis_connector_events_pos /mnt/extra-addons/openepcis_connector_events_pos
 COPY --chown=odoo:odoo openepcis_connector_events_mrp /mnt/extra-addons/openepcis_connector_events_mrp
+# Not installed by default: only useful with an OpenID provider (Keycloak).
+COPY --chown=odoo:odoo auth_oauth_end_session /mnt/extra-addons/auth_oauth_end_session
 
 # The canonical CBV event hash. The events addon declares it as an
 # external_dependency, so without it Odoo lists the addon as uninstallable —

@@ -34,7 +34,8 @@ echo "::endgroup::"
 # Manufacturing nor Point of Sale is there to trigger them. Naming them pulls
 # their dependencies in and puts their tests in the run; without that their code
 # would only ever be imported, never executed. That happened once already.
-addons=$(cd "$root" && ls -d openepcis_connector* | paste -sd, -)
+# auth_oauth_end_session is not a connector addon but lives here too.
+addons=$(cd "$root" && ls -d openepcis_connector* auth_oauth_end_session | paste -sd, -)
 tags=$(echo "$addons" | tr ',' '\n' | sed 's|^|/|' | paste -sd, -)
 echo "Installing: $addons"
 
