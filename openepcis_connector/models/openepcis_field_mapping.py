@@ -24,7 +24,7 @@ from odoo import _, api, fields, models
 from odoo.exceptions import ValidationError
 
 from ..utils.gs1 import language_tag
-from ..vendor.openepcis_client.masterdata.payload import place
+from ..vendor.openepcis_client.masterdata.payload import pick, pick_localized, place
 
 _logger = logging.getLogger(__name__)
 
@@ -170,6 +170,56 @@ class OpenepcisFieldMapping(models.Model):
                 continue
             mapping._place(payload, value)
         return payload
+
+    def read_values(self, model_name, document):
+        """Odoo field values for one model, read back out of a catalog document.
+
+        The other direction of :meth:`build_payload`, for records that change
+        in the catalog and have to reach Odoo. Only rows whose Odoo side can be
+        written are used: a plain field, a country by code, a state by name.
+        Any other relation path (``categ_id.openepcis_gpc_code``) describes how
+        to *read* a value, not where to put one, and is left out.
+
+        A value the document does not carry is left out too, never set to
+        empty: the catalog may simply not hold what Odoo knows.
+        """
+        values = {}
+        country = None
+        state_name = None
+        preferred = tuple(
+            tag for tag in (language_tag(self.env.lang or ""), language_tag("en_US")) if tag
+        )
+        for mapping in self.sudo().search([("model_name", "=", model_name)]):
+            try:
+                raw = pick(document, mapping.gs1_path)
+            except ValueError:
+                continue
+            if mapping.value_type == "localized":
+                value = pick_localized(raw, preferred)
+            elif isinstance(raw, (str, int, float, bool)):
+                value = str(raw).strip() if isinstance(raw, str) else raw
+            else:
+                value = None
+            if value is None or value == "":
+                continue
+
+            target = (mapping.odoo_field or "").strip()
+            if target == "country_id.code":
+                country = self.env["res.country"].search([("code", "=ilike", value)], limit=1)
+                if country:
+                    values["country_id"] = country.id
+            elif target == "state_id.name":
+                state_name = value
+            elif "." not in target and target in self.env[model_name]._fields:
+                values[target] = value
+
+        if state_name and country:
+            state = self.env["res.country.state"].search(
+                [("country_id", "=", country.id), ("name", "=ilike", state_name)], limit=1
+            )
+            if state:
+                values["state_id"] = state.id
+        return values
 
     def _extract(self, record):
         """The value of this row's Odoo field, shaped for the catalog."""
