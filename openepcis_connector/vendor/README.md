@@ -22,4 +22,4 @@ tools/vendor_openepcis_client.sh [path-or-url] [ref]
 
 The script records the vendored commit below.
 
-Vendored commit: `12346f9`
+Vendored commit: `2b800c8`
