@@ -15,7 +15,7 @@ provider returns them to the Odoo login page.
 Users who log in with a password are not affected.
 """,
     "author": "benelog GmbH & Co. KG",
-    "website": "https://openepcis.io",
+    "website": "https://openepcis.io/docs/connectors/odoo/single-sign-on-logout",
     "category": "Hidden/Tools",
     "version": "18.0.1.0.0",
     "license": "LGPL-3",

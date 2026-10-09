@@ -20,6 +20,29 @@ being typed a second time.
 
 ---
 
+## The addons
+
+One repository, seven addons. The connector itself depends on `product` only;
+everything that needs another Odoo app is a bridge that installs itself when
+that app is present, so a database never carries code for an app it does not
+run. Each addon's *Learn More* button in Odoo's app list opens its page on
+openepcis.io.
+
+| Addon | What it adds | Installs | Page |
+|---|---|---|---|
+| `openepcis_connector` | Products and company contacts as GS1 master data behind a Digital Link; Draw GTIN; field mapping; first load | By hand | [connector](https://openepcis.io/docs/connectors/odoo/connector) |
+| `openepcis_connector_stock` | Lots and serial numbers as per-instance documents (`/10/<lot>`, `/21/<serial>`) | With Inventory | [lots-and-serial-numbers](https://openepcis.io/docs/connectors/odoo/lots-and-serial-numbers) |
+| `openepcis_connector_product_expiry` | Mapping rows for the expiry dates on lots | With Expiration Dates | [expiration-dates](https://openepcis.io/docs/connectors/odoo/expiration-dates) |
+| `openepcis_connector_events` | Validated transfers, packing and returns as EPCIS 2.0 events; an inbox for partners' events | By hand | [visibility-events](https://openepcis.io/docs/connectors/odoo/visibility-events) |
+| `openepcis_connector_events_mrp` | A manufacturing order as one TransformationEvent | With Manufacturing | [manufacturing-events](https://openepcis.io/docs/connectors/odoo/manufacturing-events) |
+| `openepcis_connector_events_pos` | A till's operation type reads as a sale, not a shipment | With Point of Sale | [point-of-sale-events](https://openepcis.io/docs/connectors/odoo/point-of-sale-events) |
+| `auth_oauth_end_session` | Logging out of Odoo also ends the OpenID provider session | By hand | [single-sign-on-logout](https://openepcis.io/docs/connectors/odoo/single-sign-on-logout) |
+
+The master-data addons talk to the **resolver**; the events addons talk to the
+**EPCIS repository**. Two services, two switches, one offline token.
+
+---
+
 ## What it does
 
 - **Products and contacts are queued on save** and published in the background by
@@ -107,6 +130,66 @@ Instance fields are ordinary mapping rows. A second, data-only bridge,
 `product_expiry` module keeps on lots — expiration date, best-before date — so a
 database without that module never carries mapping rows pointing at fields it
 does not have.
+
+---
+
+## Visibility events
+
+Master data says what a product *is*. An EPCIS event says what *became* of one
+of them — received, packed, shipped, sold, returned, turned into something
+else — and together they are what a scanned serial number can answer. The addon
+**`openepcis_connector_events`** reports them.
+
+Every validated transfer becomes an `ObjectEvent`: what moved (a serial as an
+SGTIN, a lot as an LGTIN, untracked goods as the trade item class), when, from
+which read point, and under which business step. Packing into a logistic unit
+becomes an `AggregationEvent` under an SSCC minted from your company prefix, and
+emptying it the matching `DELETE`. Goods coming back release the shipment they
+went out on with a `TransactionEvent`. A report that turns out to be wrong is
+withdrawn with an error declaration rather than deleted.
+
+Three settings decide what is reported, and they live where the fact lives:
+
+- **The company switch** — *Settings → General Settings → OpenEPCIS → Report
+  visibility events* — with the repository address and the company prefix.
+  The repository is a different service from the resolver and usually a
+  different host; the offline token is the same one.
+- **The operation type** carries the *why*: a business step and a disposition
+  from the GS1 Core Business Vocabulary, pre-filled from Odoo's own codes
+  (`incoming` → `receiving`, `outgoing` → `shipping`, …) and never overwritten
+  once somebody has chosen otherwise.
+- **The location** carries the *where*: a GLN on the warehouse or the loading
+  bay, inherited by everything underneath it. A transfer between locations
+  with no GLN is not reported, and the transfer's chatter says so.
+
+Validating a transfer never waits for the network. The hook writes rows into an
+outbox and a scheduled action delivers them every minute; a row stays until the
+repository has not only *accepted* the document but *captured* it, because
+capture is asynchronous and a queue that deletes on the 202 reports success for
+events refused minutes later.
+
+Two bridges complete the picture, each installed automatically with its app:
+
+- **`openepcis_connector_events_mrp`** reports a finished manufacturing order as
+  the one `TransformationEvent` it is — components in, goods out, and the claim
+  that the second came from the first, which is the only thing in EPCIS that
+  carries a chain of custody across a production step.
+- **`openepcis_connector_events_pos`** knows that an operation type a till
+  points at is a sale (`retail_selling`, goods `retail_sold`), not a shipment,
+  and reseeds that operation type the moment a till is configured.
+
+Events also come *in*. A scheduled action reads what partners' systems have
+reported about our lots and packages and shows it on the record — it never
+moves stock. The one exception is deliberate and double-locked: an operation
+type may allow an incoming event to validate a transfer that is already open,
+reserved and waiting for exactly that confirmation, and only from a partner
+whose contact says *May move our transfers*. Until the operation type's
+*Observe only* flag is cleared, the decision is made and logged and nothing is
+posted.
+
+A warehouse day — receipt, pallet, delivery, return, grinding, withdrawal — is
+walked through screen by screen, with the event each step produces, at
+[openepcis.io/docs/connectors/odoo/walkthrough](https://openepcis.io/docs/connectors/odoo/walkthrough).
 
 ---
 
@@ -235,8 +318,9 @@ value in place, because an absent key means "leave alone" to the catalog. Removi
 published value is a deliberate act and this addon does not do it as a side effect
 of a sync.
 
-**Places and EPCIS events are out of scope.** Warehouses as GS1 places, and stock
-moves as EPCIS events, are separate undertakings.
+**Places are out of scope.** A warehouse gets a GLN so that events can name it as a
+read point, but it is not published as a GS1 place of its own. Stock moves as EPCIS
+events are the job of `openepcis_connector_events`, above.
 
 **Some features need a recent resolver.** Drawing identifiers, the GPC picker and
 the readiness list rely on endpoints that older deployments do not have. Test

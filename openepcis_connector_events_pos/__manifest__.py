@@ -16,7 +16,7 @@ Installed automatically when both the events addon and Point of Sale are
 present.
 """,
     "author": "benelog GmbH & Co. KG",
-    "website": "https://openepcis.io",
+    "website": "https://openepcis.io/docs/connectors/odoo/point-of-sale-events",
     "category": "Inventory/Inventory",
     "version": "18.0.1.1.0",
     "license": "LGPL-3",

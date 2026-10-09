@@ -17,7 +17,7 @@ Installed automatically when both the events addon and Manufacturing are
 present.
 """,
     "author": "benelog GmbH & Co. KG",
-    "website": "https://openepcis.io",
+    "website": "https://openepcis.io/docs/connectors/odoo/manufacturing-events",
     "category": "Manufacturing",
     "version": "18.0.1.0.0",
     "license": "LGPL-3",
