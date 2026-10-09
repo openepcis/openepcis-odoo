@@ -13,7 +13,7 @@ not have.
 Installed automatically when both are present.
 """,
     "author": "benelog GmbH & Co. KG",
-    "website": "https://openepcis.io",
+    "website": "https://openepcis.io/docs/connectors/odoo/expiration-dates",
     "category": "Inventory/Inventory",
     "version": "18.0.1.0.0",
     "license": "LGPL-3",

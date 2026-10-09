@@ -19,7 +19,7 @@ the company is switched on and the operation type is armed, and the queue is an
 outbox: validating a transfer never waits for the network.
 """,
     "author": "benelog GmbH & Co. KG",
-    "website": "https://openepcis.io",
+    "website": "https://openepcis.io/docs/connectors/odoo/visibility-events",
     "category": "Inventory/Inventory",
     "version": "18.0.1.3.0",
     "license": "LGPL-3",

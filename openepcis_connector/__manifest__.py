@@ -16,7 +16,7 @@ Publication onward to GS1 national registries happens on the platform side;
 this connector talks to the resolver's HTTP API only.
 """,
     "author": "benelog GmbH & Co. KG",
-    "website": "https://openepcis.io",
+    "website": "https://openepcis.io/docs/connectors/odoo/connector",
     "category": "Inventory/Inventory",
     "version": "18.0.1.1.0",
     "license": "LGPL-3",
