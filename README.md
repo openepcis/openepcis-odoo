@@ -243,6 +243,19 @@ the readiness list rely on endpoints that older deployments do not have. Test
 connection reports that as "not available on this deployment" rather than as a fault
 on your side.
 
+## Single sign-on logout (`auth_oauth_end_session`)
+
+A small companion addon, independent of the connector. With Odoo's OAuth login,
+logging out only ends the Odoo session; the session at the identity provider stays,
+and the next "Sign in with ..." logs straight back in. Install
+`auth_oauth_end_session` and fill in **End session URL** on the OAuth provider
+(Keycloak: `https://<host>/realms/<realm>/protocol/openid-connect/logout`). Logging
+out then also ends the provider session and returns to `/web/login`.
+
+Register `https://<odoo>/web/login` as a valid post-logout redirect URI on the client.
+Odoo's implicit flow receives no ID token, so the provider may ask the user to
+confirm the logout.
+
 ---
 
 ## ⚠️ Drawing identifiers is not a dry run
